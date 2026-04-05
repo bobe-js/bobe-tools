@@ -1,0 +1,59 @@
+{
+  "name": "bobe",
+  "displayName": "bobe",
+  "description": "bobe",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "scripts": {
+    "build": "rspack build -c ./rspack.config.js"
+  },
+  "contributes": {
+    "typescriptServerPlugins": [{
+      "name": "bobe-ts-service-plugin",
+      "enableForWorkspaceTypeScriptVersions": true
+    }],
+    "languages": [
+      {
+        "id": "bobe",
+        "aliases": [
+          "bobe",
+          "bobe"
+        ],
+        "extensions": [
+          "bobe"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bobe",
+        "scopeName": "source.bobe",
+        "path": "./syntaxes/bobe.tmLanguage.json"
+      },
+      {
+        "scopeName": "inline.bobe",
+        "path": "./syntaxes/bobe-inline.tmLanguage.json",
+        "injectTo": [
+          "source.ts",
+          "source.js",
+          "source.tsx",
+          "source.jsx",
+          "source.svelte",
+          "source.vue",
+          "text.html.basic",
+          "text.html.derivative",
+          "text.html.vue"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "bobe-ts-service-plugin": "workspace:*"
+  }
+}

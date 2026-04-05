@@ -1,0 +1,21 @@
+{
+  "name": "bobe-lang",
+  "displayName": "bobe-lang",
+  "description": "bobe-lang",
+  "version": "0.0.1",
+  "categories": [
+    "Programming Languages"
+  ],
+  "scripts": {
+    "build": "rspack build -c ./rspack.config.js"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@types/node": "^25.5.2",
+    "rollup": "^4.60.1",
+    "rollup-plugin-dts": "^6.4.1",
+    "rollup-plugin-esbuild": "^6.2.1",
+    "typescript": "^6.0.2"
+  }
+}

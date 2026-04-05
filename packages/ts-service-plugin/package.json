@@ -1,0 +1,21 @@
+{
+  "name": "bobe-ts-service-plugin",
+  "displayName": "bobe-ts-service-plugin",
+  "description": "bobe-ts-service-plugin",
+  "version": "0.0.1",
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "dist/bobe-ts-service-plugin.cjs.js",
+  "module": "dist/bobe-ts-service-plugin.esm.js",
+  "browser": "dist/bobe-ts-service-plugin.umd.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "rollup -c rollup.config.ts --configPlugin esbuild",
+    "dev": "rollup -w -c rollup.config.ts --configPlugin esbuild"
+  },
+  "dependencies": {
+    "typescript": "^6.0.2",
+    "typescript-template-language-service-decorator": "^2.3.2"
+  }
+}
