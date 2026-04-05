@@ -39,6 +39,9 @@
       {
         "scopeName": "inline.bobe",
         "path": "./syntaxes/bobe-inline.tmLanguage.json",
+        "embeddedLanguages": {
+          "source.bobe": "bobe"
+        },
         "injectTo": [
           "source.ts",
           "source.js",

@@ -1,6 +1,10 @@
 import { TemplateLanguageService, TemplateContext } from 'typescript-template-language-service-decorator';
 import * as ts from 'typescript/lib/tsserverlibrary';
-import { G } from './global';
+import { log } from './global';
+import { createMemo } from './util';
+import { htmlData } from './data/webCustomData';
+
+const memoTag = createMemo();
 
 export class BobeTemplateService implements TemplateLanguageService {
   constructor(
@@ -9,11 +13,22 @@ export class BobeTemplateService implements TemplateLanguageService {
   ) {}
   // 这里的 position 是相对于模板内部的偏移量（0 是反引号后的第一个字符）
   getCompletionsAtPosition(context: TemplateContext, position: ts.LineAndCharacter): ts.CompletionInfo {
-    const entries: ts.CompletionEntry[] = [];
+    let entries: ts.CompletionEntry[] = [];
 
     // 1. 计算光标在 context.text 中的索引
     // 注意：TemplateContext 处理了换行，我们需要将 LineAndCharacter 转为 character offset
     const lines = context.text.split(/\n/);
+    const currentLine = lines[position.line];
+    const prefix = currentLine.slice(0, position.character).trimStart();
+    log('当前行', currentLine);
+    log('前置', currentLine.slice(0, position.character));
+    /*----------------- 输入位置为标签 -----------------*/
+    if (/^\w+$/.test(prefix)) {
+      entries = this.getEntriesByPrefix(prefix);
+      return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
+    }
+    /*----------------- 输入位置为属性 -----------------*/
+
     let cursorOffset = 0;
     for (let i = 0; i < position.line; i++) {
       cursorOffset += lines[i].length + 1; // +1 是换行符
@@ -22,7 +37,6 @@ export class BobeTemplateService implements TemplateLanguageService {
 
     // 2. 判断是否在 {} 内部
     if (!this.isInsideBraces(context.text, cursorOffset)) {
-      G.log.info('内容'+ context.text);
       return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries: [] };
     }
 
@@ -89,6 +103,37 @@ export class BobeTemplateService implements TemplateLanguageService {
     return true;
   }
 
+  getEntriesByPrefix = memoTag((prefix: string) => {
+    const filteredHTMLEntries = htmlData.tags
+      .filter(tag => tag.name.startsWith(prefix))
+      .map(tag => {
+        return {
+          name: tag.name,
+          kind: this.tss.ScriptElementKind.classElement,
+          sortText: `00000000${tag.name}`
+        };
+      });
+    const filteredKeyWordEntries = BobeTemplateService.KeyWordEntries.filter(entry => entry.name.startsWith(prefix));
+    return [...filteredHTMLEntries, ...filteredKeyWordEntries];
+  });
+
+  static KeyWordEntries: ts.CompletionEntry[] = [
+    {
+      name: 'if',
+      kind: ts.ScriptElementKind.keyword,
+      sortText: '        1if'
+    },
+    {
+      name: 'else',
+      kind: ts.ScriptElementKind.keyword,
+      sortText: '        2else'
+    },
+    {
+      name: 'for',
+      kind: ts.ScriptElementKind.keyword,
+      sortText: '        3for'
+    }
+  ];
   // 辅助方法：根据符号标志返回对应的图标类型
   private getCompletionKind(symbol: ts.Symbol): ts.ScriptElementKind {
     const flags = symbol.getFlags();
