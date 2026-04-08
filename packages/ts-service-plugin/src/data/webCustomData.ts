@@ -2,6 +2,21 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+import { CompletionEntry, ScriptElementKind } from "typescript";
+const heightLevelEvents = [
+  'onclick',
+  'onchange',
+  'oninput',
+  'onscroll',
+  'onmousedown',
+  'onmouseup',
+  'onmousemove',
+  'onmouseover',
+  'onmouseout',
+  'onmouseenter',
+  'onmouseleave',
+]
 // file generated from @vscode/web-custom-data NPM package
 export const htmlData = {
 	"version": 1.1,
@@ -11893,3 +11908,22 @@ export const htmlData = {
 		}
 	]
 };
+
+export const sharedEntries = htmlData.globalAttributes.map(prop => {
+  return {
+    name: prop.name,
+    kind: ScriptElementKind.memberVariableElement,
+    sortText: `00000000${prop.name}`,
+    insertText: prop.name[0] === 'o' && prop.name[1] === 'n' ? `${prop.name}={$0}` : `${prop.name}='$0'`,
+    isSnippet: true,
+  } as CompletionEntry;
+}).concat(
+  ...heightLevelEvents.map((name, i) => ({
+    name,
+    kind: ScriptElementKind.memberVariableElement,
+    sortText: `000000000${i}${name}`,
+    insertText: `${name}={$0}`,
+    isSnippet: true,
+  } as CompletionEntry))
+);
+

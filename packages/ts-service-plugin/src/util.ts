@@ -1,3 +1,5 @@
+import { Virtual_File_Exp, Virtual_File_Suffix } from "./global";
+
 export class LRUCache<K = string, V = any> {
   private maxSize: number;
   private cache: Map<K, V> = new Map();
@@ -60,4 +62,15 @@ export function createMemo() {
     };
     return wrap as T;
   };
+}
+
+export function getVirtualName(fileName: string) {
+  const dotI = fileName.lastIndexOf('.');
+  const rawName = fileName.slice(0, dotI);
+  const suffix = fileName.slice(dotI);
+  return rawName + Virtual_File_Suffix + suffix;
+}
+
+export function isVirtualFile(fileName: string) {
+  return fileName.match(Virtual_File_Exp)
 }
