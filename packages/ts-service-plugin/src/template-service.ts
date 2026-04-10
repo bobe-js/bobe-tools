@@ -1,7 +1,8 @@
 import { TemplateLanguageService, TemplateContext } from 'typescript-template-language-service-decorator';
 import * as ts from 'typescript/lib/tsserverlibrary';
-import { log, Virtual_File_Suffix } from './global';
+import { log } from './global';
 import { createMemo, getVirtualName } from './util';
+import { VirtualDocumentResult } from './buildVirtualDocument';
 import { sharedEntries, htmlData } from './data/webCustomData';
 
 const memoTag = createMemo();
@@ -15,7 +16,8 @@ export class BobeTemplateService implements TemplateLanguageService {
   constructor(
     public tss: typeof ts,
     public _ls: ts.LanguageService,
-    public project: ts.server.Project
+    public project: ts.server.Project,
+    public getVirtualResult: (virtualFileName: string) => VirtualDocumentResult
   ) {}
   // 这里的 position 是相对于模板内部的偏移量（0 是反引号后的第一个字符）
   getCompletionsAtPosition(context: TemplateContext, position: ts.LineAndCharacter): ts.CompletionInfo {
@@ -48,9 +50,31 @@ export class BobeTemplateService implements TemplateLanguageService {
     /*----------------- 其余情况使用 虚拟文档模拟 -----------------*/
     const vFileName = getVirtualName(context.fileName);
 
-    const comp = this._ls.getCompletionsAtPosition(vFileName, 7, undefined);
+    // 计算光标在模板字符串内的绝对 offset
+    const cursorOffset = lines.slice(0, position.line).reduce((sum, l) => sum + l.length + 1, 0) + position.character;
+
+    // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
+    const { templates } = this.getVirtualResult(vFileName);
+    let virtualOffset: number | undefined;
+    outer: for (const tmpl of templates) {
+      for (const entry of tmpl.sourceMap) {
+        if (cursorOffset >= entry.templateOffset && cursorOffset <= entry.templateOffset + entry.length) {
+          virtualOffset = tmpl.iifeStartInVirtual + entry.codeOffset + (cursorOffset - entry.templateOffset);
+          break outer;
+        }
+      }
+    }
+
+    log('cursorOffset', String(cursorOffset));
+    log('virtualOffset', String(virtualOffset));
+
+    if (virtualOffset === undefined) {
+      return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries: [] };
+    }
+
+    const comp = this._ls.getCompletionsAtPosition(vFileName, virtualOffset, undefined);
     log('虚拟文档模拟', JSON.stringify(comp?.entries[0], undefined, 2));
-    log('是否有 MessageChannel', String(Boolean(comp?.entries.find(it=> it.name==='MessageChannel'))));
+    log('是否有 hello', String(Boolean(comp?.entries.find(it=> it.name==='hello'))));
     
     return {
       isGlobalCompletion: false,

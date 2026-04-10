@@ -1,0 +1,60 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode"
+      ]
+    },
+    {
+      "name": "Extension + Debug TS Server",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode",
+        "--inspect-extensions=9339"
+      ],
+      "env": {
+        "TSS_DEBUG_BRK": "9229"
+      }
+    },
+    {
+      "name": "ts-node",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--loader", "${workspaceFolder}/node_modules/ts-node/esm.mjs",
+        "--no-warnings"
+      ],
+      "args": [
+        "${file}"
+      ],
+      "cwd": "${workspaceFolder}/packages/ts-service-plugin",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder}/packages/ts-service-plugin/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Attach to TS Server",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "timeout": 30000,
+      "restart": true,
+      "trace": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Plugin (Extension + TS Server)",
+      "configurations": ["Extension + Debug TS Server", "Attach to TS Server"],
+      "stopAll": true
+    }
+  ]
+}

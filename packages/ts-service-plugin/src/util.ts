@@ -71,6 +71,10 @@ export function getVirtualName(fileName: string) {
   return rawName + Virtual_File_Suffix + suffix;
 }
 
+export function getRealName(virtualFileName: string) {
+  return virtualFileName.replace(Virtual_File_Exp, '');
+}
+
 export function isVirtualFile(fileName: string) {
   return fileName.match(Virtual_File_Exp)
 }

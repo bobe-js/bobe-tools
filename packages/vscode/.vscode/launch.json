@@ -12,6 +12,32 @@
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			]
+		},
+		{
+			"name": "Extension + Debug TS Server",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--inspect-extensions=9339"
+			],
+			"env": {
+				"TSS_DEBUG_BRK": "9229"
+			}
+		},
+		{
+			"name": "Attach to TS Server",
+			"type": "node",
+			"request": "attach",
+			"port": 9229,
+			"trace": true
+		}
+	],
+	"compounds": [
+		{
+			"name": "Debug Plugin (Extension + TS Server)",
+			"configurations": ["Extension + Debug TS Server", "Attach to TS Server"],
+			"stopAll": true
 		}
 	]
 }

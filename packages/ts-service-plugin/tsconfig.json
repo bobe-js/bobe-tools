@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "module": "esnext",
+    "module": "commonjs",
+    "moduleResolution": "bundler",
     "target": "ES2019",
     "outDir": "lib",
     "rootDir": "src",
@@ -8,8 +9,7 @@
     "declaration": true,
     "sourceMap": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
   },
-
-  "exclude": ["lib", "e2e", "node_modules", "test-workspace"]
+  "exclude": ["lib", "e2e", "node_modules", "test-workspace", "rollup.config.ts"]
 }
