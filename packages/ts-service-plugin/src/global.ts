@@ -4,6 +4,6 @@ export function log(...args: (string | number)[]) {
   G.log.info(args.join(' '));
 }
 
-export const Virtual_File_Suffix = '_bobevritualfile';
+export const Virtual_File_Suffix = '__bobe_virtual_file__';
 
-export const Virtual_File_Exp = /_bobevritualfile/;
+export const Virtual_File_Exp = /__bobe_virtual_file__/;

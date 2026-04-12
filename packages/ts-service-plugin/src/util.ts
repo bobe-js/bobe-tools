@@ -1,4 +1,9 @@
+import * as ts from 'typescript/lib/tsserverlibrary';
 import { Virtual_File_Exp, Virtual_File_Suffix } from "./global";
+
+export function isBobeTaggedTemplate(node: ts.TaggedTemplateExpression, tss: typeof ts): boolean {
+  return tss.isIdentifier(node.tag) && node.tag.text === 'bobe';
+}
 
 export class LRUCache<K = string, V = any> {
   private maxSize: number;

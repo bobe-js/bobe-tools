@@ -1,9 +1,16 @@
-import { TemplateLanguageService, TemplateContext } from 'typescript-template-language-service-decorator';
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { log } from './global';
 import { createMemo, getVirtualName } from './util';
 import { VirtualDocumentResult } from './buildVirtualDocument';
 import { sharedEntries, htmlData } from './data/webCustomData';
+
+/** BobeTemplateService 方法接收的最小 context 对象 */
+export interface BobeContext {
+  node: ts.TemplateLiteral;
+  fileName: string;
+  text: string;
+  sf: ts.SourceFile;
+}
 
 const memoTag = createMemo();
 const memoProp = createMemo();
@@ -12,7 +19,7 @@ const WHOLE_TEXT = /^\w+$/;
 const QUOTE = /'|"/g;
 const TAG_TEXT = /(?!(for|if|else))^\w+/;
 const PROP_TEXT = /(?:^|\s)([a-zA-Z@\-\[\]\(\)]*)$/;
-export class BobeTemplateService implements TemplateLanguageService {
+export class BobeTemplateService {
   constructor(
     public tss: typeof ts,
     public _ls: ts.LanguageService,
@@ -20,7 +27,7 @@ export class BobeTemplateService implements TemplateLanguageService {
     public getVirtualResult: (virtualFileName: string) => VirtualDocumentResult
   ) {}
   // 这里的 position 是相对于模板内部的偏移量（0 是反引号后的第一个字符）
-  getCompletionsAtPosition(context: TemplateContext, position: ts.LineAndCharacter): ts.CompletionInfo {
+  getCompletionsAtPosition(context: BobeContext, position: ts.LineAndCharacter): ts.CompletionInfo {
     let entries: ts.CompletionEntry[] = [];
     this._ls.getCompletionsAtPosition;
     // 1. 计算光标在 context.text 中的索引
@@ -48,6 +55,7 @@ export class BobeTemplateService implements TemplateLanguageService {
     }
 
     /*----------------- 其余情况使用 虚拟文档模拟 -----------------*/
+    // TODO: ${组件} 无代码提示
     const vFileName = getVirtualName(context.fileName);
 
     // 计算光标在模板字符串内的绝对 offset
@@ -59,7 +67,7 @@ export class BobeTemplateService implements TemplateLanguageService {
     outer: for (const tmpl of templates) {
       for (const entry of tmpl.sourceMap) {
         if (cursorOffset >= entry.templateOffset && cursorOffset <= entry.templateOffset + entry.length) {
-          virtualOffset = tmpl.iifeStartInVirtual + entry.codeOffset + (cursorOffset - entry.templateOffset);
+          virtualOffset = tmpl.iifeStartInVirtual! + entry.codeOffset + (cursorOffset - entry.templateOffset);
           break outer;
         }
       }
@@ -74,8 +82,8 @@ export class BobeTemplateService implements TemplateLanguageService {
 
     const comp = this._ls.getCompletionsAtPosition(vFileName, virtualOffset, undefined);
     log('虚拟文档模拟', JSON.stringify(comp?.entries[0], undefined, 2));
-    log('是否有 hello', String(Boolean(comp?.entries.find(it=> it.name==='hello'))));
-    
+    log('是否有 hello', String(Boolean(comp?.entries.find(it => it.name === 'hello'))));
+
     return {
       isGlobalCompletion: false,
       isMemberCompletion: false,
@@ -144,6 +152,75 @@ export class BobeTemplateService implements TemplateLanguageService {
     log('props 匹配', JSON.stringify(propEntries[0], undefined, 2));
     return [...propEntries, ...sharedEntries];
   });
+
+  getSemanticDiagnostics(context: BobeContext): ts.Diagnostic[] {
+    const vFileName = getVirtualName(context.fileName);
+    const { templates } = this.getVirtualResult(vFileName);
+
+    // 找到与当前 context 对应的模板（通过 backtick 后第一个字符的绝对 offset 匹配）
+    const templateStartInSource = context.node.getStart() + 1;
+    const tmpl = templates.find(t => t.templateStartInSource === templateStartInSource);
+    if (!tmpl || tmpl.errors.length) return [];
+
+    let rawDiags: ts.Diagnostic[];
+    try {
+      rawDiags = this._ls.getSemanticDiagnostics(vFileName);
+    } catch (e) {
+      log('getSemanticDiagnostics 异常', String(e));
+      return [];
+    }
+    const result: ts.Diagnostic[] = [];
+
+    for (const diag of rawDiags) {
+      if (diag.start === undefined) continue;
+
+      // 反向映射：虚拟文档绝对 offset → 模板内相对 offset（0-based）
+      // decorator 会自动加上 context.node.getStart() + 1，所以这里只返回相对值
+      let templateRelativeOffset: number | undefined;
+      let mappedLength = diag.length ?? 1;
+
+      for (const entry of tmpl.sourceMap) {
+        const entryVirtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
+        const entryVirtualEnd = entryVirtualStart + entry.length;
+        if (diag.start >= entryVirtualStart && diag.start < entryVirtualEnd) {
+          templateRelativeOffset = entry.templateOffset + (diag.start - entryVirtualStart);
+          mappedLength = Math.min(mappedLength, entry.length - (diag.start - entryVirtualStart));
+          break;
+        }
+      }
+
+      if (templateRelativeOffset === undefined) continue;
+
+      result.push({ ...diag, start: templateRelativeOffset, length: mappedLength });
+    }
+
+    log('getSemanticDiagnostics 映射结果', String(result.length));
+    return result;
+  }
+
+  getSyntacticDiagnostics(context: BobeContext): ts.Diagnostic[] {
+    // TODO: input value= style='' 会报错，误认为 value=style =''
+    const vFileName = getVirtualName(context.fileName);
+    const { templates } = this.getVirtualResult(vFileName);
+
+    // 找到与当前 context 对应的模板（通过 backtick 后第一个字符的绝对 offset 匹配）
+    const templateStartInSource = context.node.getStart() + 1;
+    const tmpl = templates.find(t => t.templateStartInSource === templateStartInSource);
+    if (!tmpl || !tmpl.errors.length) return [];
+    const { errors } = tmpl;
+    const sf = context.sf;
+    return errors.map(err => {
+      return {
+        category: ts.DiagnosticCategory.Error,
+        code: err.code,
+        messageText: err.message,
+        file: sf,
+        start: err.loc?.start?.offset - 1,
+        length: err.loc?.source?.length,
+        source: 'bobe-js'
+      } as ts.Diagnostic;
+    });
+  }
 
   // getCompletionEntryDetails(context: TemplateContext, position: ts.LineAndCharacter, name: string) {
   //   // 根据 name 返回不同的文档描述

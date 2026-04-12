@@ -18,8 +18,8 @@ importers:
         specifier: ^25.5.2
         version: 25.5.2
       bobe:
-        specifier: ^0.0.35
-        version: 0.0.35
+        specifier: ^0.0.37
+        version: 0.0.37
       rollup:
         specifier: ^4.60.1
         version: 4.60.1
@@ -435,17 +435,17 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  aoye@0.0.35:
-    resolution: {integrity: sha512-pKzH/AJzAh31C9+nySe62ZlM1qFhAyaJ5zOF0jxFOryLyPnt4hGAmpeo1jMCS/xZ1lTzkcA2K0wTg//kiSdSrw==}
+  aoye@0.0.37:
+    resolution: {integrity: sha512-vKsRD2FtMpwd079C3hzCf8fe2NgKFg6Q8rJa8gTAi2hkLA2ALRIw2RqrnclSG29R3nvx6cmSvglaQM4VM32GRA==}
 
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
-  bobe-shared@0.0.35:
-    resolution: {integrity: sha512-6Ff0My1TaKJzNpVMt7CFcglJ4JhSL5q//cc+3F2iNwS6X/N4BDrh69ar+R+aWYspPiB/Q1HXxJs8PAHvtznF0Q==}
+  bobe-shared@0.0.37:
+    resolution: {integrity: sha512-VvNeyVxiunopS7jcecpSME8sI+T3jM5O+n0yUqR4nTsOFFx0CtNFDYRJBVgVjTwnQJis2eNjDbdtMk4BJAIqsA==}
 
-  bobe@0.0.35:
-    resolution: {integrity: sha512-+sthaseVQbRZRfXHRoJUQmBeGbaTNx4eHpvQS0QwvyDKfGnVUpbqwDx3ZblR7Z0DXvSoFrr9iOHy4NmulTAYqA==}
+  bobe@0.0.37:
+    resolution: {integrity: sha512-1BZw2t5eVybUTMsKBwc9mNTeu8sOoc+VGnX3rjl6iYrh+AHCS9mXGwTeJdqMILjp21LOJnpGJmjGEwLeF9eW5w==}
 
   commondir@1.0.1:
     resolution: {integrity: sha512-W9pAhw0ja1Edb5GVdIF1mjZw/ASI0AlShXM83UUGe2DVr5TdAPEA1OA8m/g8zWp9x6On7gqufY+FatDbC3MDQg==}
@@ -855,18 +855,18 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  aoye@0.0.35:
+  aoye@0.0.37:
     dependencies:
-      bobe-shared: 0.0.35
+      bobe-shared: 0.0.37
 
   arg@4.1.3: {}
 
-  bobe-shared@0.0.35: {}
+  bobe-shared@0.0.37: {}
 
-  bobe@0.0.35:
+  bobe@0.0.37:
     dependencies:
-      aoye: 0.0.35
-      bobe-shared: 0.0.35
+      aoye: 0.0.37
+      bobe-shared: 0.0.37
 
   commondir@1.0.1: {}
 

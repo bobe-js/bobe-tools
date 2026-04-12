@@ -45,7 +45,7 @@ class Dent {
 }
 
 const BRACE_REG = /^\$\{|^\{|\}$/g;
-
+const BOBE_PREFIX = '$Bobe';
 export class Bobe2ts {
   tokenizer: Tokenizer;
   compiler: Compiler;
@@ -62,37 +62,45 @@ export class Bobe2ts {
     /** 表达式的字符长度 */
     length: number
   ) {
-    this.res.sourceMap.push({ templateOffset, codeOffset, length });
+    this.res.sourceMap.push({ templateOffset, codeOffset: this.iiefHeadLength + codeOffset, length });
   }
   dent = new Dent(2);
   lines: string[] = [];
-  _name = 'a_' + Date.now().toString(36);
+  id = Date.now().toString(36);
   i = 0;
   gdt = 0;
   get name() {
-    return `${this._name}_${this.i}`;
+    return `a_${this.id}_${this.i}`;
   }
-  output = `type Processor = {
+  get h() {
+    return `h_${this.id}_${this.i}`;
+  }
+  get t() {
+    return `t_${this.id}_${this.i}`;
+  }
+  output = `type ${BOBE_PREFIX}CreateTextOrComponent = {
 ${this.dent.v}(input: string): Text;
 ${this.dent.v}<T>(input: (...args: any[]) => T): T;
 ${this.dent.v}<T extends new (...args: any[]) => any>(input: T): T;
 };
-type CE = typeof document.createElement;
-${this.dent.v}let h!:<K extends keyof HTMLElementTagNameMap>(
+${this.dent.v}let ${this.h}!:<K extends keyof HTMLElementTagNameMap>(
 ${this.dent.v}tag: K, 
 ${this.dent.v}options?: ElementCreationOptions
 ) => Omit<HTMLElementTagNameMap[K], 'textContent'|'style'> & { text: string, style: string };
-${this.dent.v}let t!: Processor;
+${this.dent.v}let t!: ${BOBE_PREFIX}CreateTextOrComponent;
 `;
 
-  constructor(public templateCode: string) {
+  constructor(
+    public iiefHeadLength: number,
+    public templateCode: string
+  ) {
     const tokenizer = (this.tokenizer = new Tokenizer(() => undefined, false));
     tokenizer.setCode(templateCode);
     const compiler = (this.compiler = new Compiler(tokenizer, {
       parseElementNode: {
         propsAdded: node => {
           const _node = node!;
-          this.output += `${this.dent.v}let ${this.name}=h('`;
+          this.output += `${this.dent.v}let ${this.name}=${this.h}('`;
           this.map(this.off(_node), this.output.length, _node.tagName.length);
           this.output += `${_node.tagName}');`;
           this.createSetPropsExp(_node.props);
@@ -116,7 +124,7 @@ ${this.dent.v}let t!: Processor;
           }
           // 文本节点表达式
           else {
-            this.output += `${this.dent.v}let ${this.name}=t(`;
+            this.output += `${this.dent.v}let ${this.name}=${this.t}(`;
             this.map(this.off(_node), this.output.length, source.length);
             this.output += `${sourceName});`;
           }
@@ -197,7 +205,8 @@ ${this.dent.v}let t!: Processor;
     return {
       output: this.output,
       input: this.templateCode,
-      sourceMap: this.res.sourceMap
+      sourceMap: this.res.sourceMap,
+      errors: this.compiler.errors
     };
   }
 }
@@ -209,10 +218,10 @@ ${this.dent.v}let t!: Processor;
 //   div style="display: flex; align-items: center;"
 //     h1 onclick={() => delItem(i)}
 //       {item.value}
-//     input type="text"  oninput={(e) => updateItem(i, e.target.value)} 
-// if show    
+//     input type="text"  oninput={(e) => updateItem(i, e.target.value)}
+// if show
 //   div
-//     {'哈哈哈'}  
+//     {'哈哈哈'}
 // `);
 
 // const res = p.process();
