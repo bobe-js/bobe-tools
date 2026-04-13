@@ -83,3 +83,83 @@ export function getRealName(virtualFileName: string) {
 export function isVirtualFile(fileName: string) {
   return fileName.match(Virtual_File_Exp)
 }
+
+/**
+ * s1    e1
+ * 0  1 
+ *    1  2
+ *    s2    e2
+ */
+export function isOverlap(start1: number, end1: number, start2: number, end2: number) {
+  return start1 < end2 && start2 < end1;
+}
+
+/** 判断在 {} 内 */
+export function inInsBrace(content: string, targetIndex: number): boolean {
+    let stack: ("block" | "expression")[] = [];
+
+    for (let i = 0; i < content.length; i++) {
+        // 在检查状态之前，先判断是否到达了目标索引
+        if (i === targetIndex) {
+            // 判断标准：
+            // 1. 栈不为空（表示在某类括号内）
+            // 2. 栈顶必须是 'block'，不能是 'expression'
+            return stack.length > 0 && stack[stack.length - 1] === "block";
+        }
+
+        const char = content[i];
+        const nextChar = content[i + 1];
+
+        // 1. 识别 ${
+        if (char === '$' && nextChar === '{') {
+            stack.push("expression");
+            i++; // 跳过 '{'，避免下次循环重复处理
+            continue;
+        }
+
+        // 2. 识别普通的 {
+        if (char === '{') {
+            stack.push("block");
+            continue;
+        }
+
+        // 3. 识别 }
+        if (char === '}') {
+            stack.pop();
+            continue;
+        }
+    }
+
+    return false;
+}
+
+/** 获取当前节点最近的类名 */
+export function findPrecedingClassName(targetNode: ts.Node, sourceFile: ts.SourceFile, tss: typeof ts): string | undefined {
+  let result: string | undefined;
+  function visit(node: ts.Node) {
+    if (node.pos >= targetNode.pos) return;
+    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name) {
+      result = node.name.text;
+    }
+    tss.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return result;
+}
+/** 根据类名获取成员名称列表 */
+export function getClassMemberNames(className: string, sourceFile: ts.SourceFile, tss: typeof ts): string[] {
+  const names: string[] = [];
+  function visit(node: ts.Node) {
+    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name?.text === className) {
+      for (const member of node.members) {
+        if ((tss.isPropertyDeclaration(member) || tss.isMethodDeclaration(member)) && tss.isIdentifier(member.name)) {
+          names.push(member.name.text);
+        }
+      }
+      return;
+    }
+    tss.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return names;
+}

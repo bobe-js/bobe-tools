@@ -1,6 +1,6 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { log } from './global';
-import { createMemo, getVirtualName } from './util';
+import { createMemo, findPrecedingClassName, getClassMemberNames, getVirtualName, inInsBrace, isOverlap } from './util';
 import { VirtualDocumentResult } from './buildVirtualDocument';
 import { sharedEntries, htmlData } from './data/webCustomData';
 
@@ -53,9 +53,21 @@ export class BobeTemplateService {
 
       return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
     }
+    /*----------------- 在 {} 内且当前字符不是 '.' -----------------*/
+    if (inInsBrace(context.text, position.character) && context.text[position.character] !== '.') {
+      const name = findPrecedingClassName(context.node, context.sf, this.tss);
+      if (name) {
+        const keys = getClassMemberNames(name, context.sf, this.tss);
+        entries = keys.map((key, i) => ({
+          name: key,
+          kind: this.tss.ScriptElementKind.memberVariableElement,
+          sortText: `00000000${i}${key}`
+        }));
+      }
+      return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
+    }
 
     /*----------------- 其余情况使用 虚拟文档模拟 -----------------*/
-    // TODO: ${组件} 无代码提示
     const vFileName = getVirtualName(context.fileName);
 
     // 计算光标在模板字符串内的绝对 offset
@@ -90,33 +102,6 @@ export class BobeTemplateService {
       isNewIdentifierLocation: false,
       entries: comp?.entries || []
     };
-  }
-
-  /**
-   * 辅助方法：简单判断光标是否在 {} 之间
-   */
-  private isInsideBraces(text: string, offset: number): boolean {
-    const beforeText = text.slice(0, offset);
-    const afterText = text.slice(offset);
-
-    // 逻辑：向前找最近的 {，且确保这中间没有 }
-    const lastOpen = beforeText.lastIndexOf('{');
-    const lastClose = beforeText.lastIndexOf('}');
-
-    // 如果没有 { 或者 最近的一个括号是 }，说明不在花括号内
-    if (lastOpen === -1 || lastOpen < lastClose) {
-      return false;
-    }
-
-    // 向后找最近的 }，且确保中间没有 {
-    const nextClose = afterText.indexOf('}');
-    const nextOpen = afterText.indexOf('{');
-
-    if (nextClose === -1 || (nextOpen !== -1 && nextOpen < nextClose)) {
-      return false;
-    }
-
-    return true;
   }
 
   getEntriesByTagPrefix = memoTag((prefix: string) => {
@@ -160,7 +145,7 @@ export class BobeTemplateService {
     // 找到与当前 context 对应的模板（通过 backtick 后第一个字符的绝对 offset 匹配）
     const templateStartInSource = context.node.getStart() + 1;
     const tmpl = templates.find(t => t.templateStartInSource === templateStartInSource);
-    if (!tmpl || tmpl.errors.length) return [];
+    if (!tmpl) return [];
 
     let rawDiags: ts.Diagnostic[];
     try {
@@ -170,7 +155,6 @@ export class BobeTemplateService {
       return [];
     }
     const result: ts.Diagnostic[] = [];
-
     for (const diag of rawDiags) {
       if (diag.start === undefined) continue;
 
@@ -182,24 +166,20 @@ export class BobeTemplateService {
       for (const entry of tmpl.sourceMap) {
         const entryVirtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
         const entryVirtualEnd = entryVirtualStart + entry.length;
-        if (diag.start >= entryVirtualStart && diag.start < entryVirtualEnd) {
-          templateRelativeOffset = entry.templateOffset + (diag.start - entryVirtualStart);
+        if (isOverlap(entryVirtualStart, entryVirtualEnd, diag.start, diag.start + mappedLength)) {
+          templateRelativeOffset = entry.templateOffset;
           mappedLength = Math.min(mappedLength, entry.length - (diag.start - entryVirtualStart));
+          result.push({ ...diag, start: entry.templateOffset, length: entry.length });
           break;
         }
       }
-
-      if (templateRelativeOffset === undefined) continue;
-
-      result.push({ ...diag, start: templateRelativeOffset, length: mappedLength });
     }
 
-    log('getSemanticDiagnostics 映射结果', String(result.length));
+    log('getSemanticDiagnostics 映射结果', result.length);
     return result;
   }
 
   getSyntacticDiagnostics(context: BobeContext): ts.Diagnostic[] {
-    // TODO: input value= style='' 会报错，误认为 value=style =''
     const vFileName = getVirtualName(context.fileName);
     const { templates } = this.getVirtualResult(vFileName);
 

@@ -22,23 +22,17 @@
       }
     },
     {
-      "name": "ts-node",
+      "name": "ts-node Debugger",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "--loader", "${workspaceFolder}/node_modules/ts-node/esm.mjs",
-        "--no-warnings"
-      ],
-      "args": [
-        "${file}"
-      ],
-      "cwd": "${workspaceFolder}/packages/ts-service-plugin",
-      "env": {
-        "TS_NODE_PROJECT": "${workspaceFolder}/packages/ts-service-plugin/tsconfig.json",
-        "TS_NODE_TRANSPILE_ONLY": "true"
-      },
-      "skipFiles": ["<node_internals>/**"]
+      "program": "${workspaceRoot}/packages/ts-service-plugin/src/bobeToTs.ts",
+      "runtimeArgs": ["--nolazy", "-r", "ts-node/register"],
+      "sourceMaps": true,
+      "cwd": "${workspaceRoot}/packages/ts-service-plugin",
+      "protocol": "inspector",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "runtimeExecutable": "/Users/linjiajian/.nvm/versions/node/v20.19.3/bin/node" // where node
     },
     {
       "name": "Attach to TS Server",

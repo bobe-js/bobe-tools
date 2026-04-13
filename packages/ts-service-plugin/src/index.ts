@@ -144,7 +144,7 @@ export default (modules: { typescript: typeof ts }) => {
 
       // 构造最小 context 对象（BobeTemplateService 只用 node、fileName、text）
       function makeContext(templateNode: ts.TemplateLiteral, sf: ts.SourceFile, fileName: string) {
-        return { node: templateNode, fileName, text: templateNode.getText().slice(1, -1) };
+        return { node: templateNode, fileName, text: templateNode.getText().slice(1, -1), sf };
       }
 
       // 代理原始 info.languageService，拦截模板相关方法
@@ -176,7 +176,8 @@ export default (modules: { typescript: typeof ts }) => {
                 const tmpl = getValidBobeTemplateNode(node);
                 if (tmpl) {
                   const ctx = makeContext(tmpl, sf!, fileName);
-                  for (const d of templateService.getSemanticDiagnostics(ctx as any)) {
+                  const rawDiags = templateService.getSemanticDiagnostics(ctx as any);
+                  for (const d of rawDiags) {
                     templateDiags.push({ ...d, start: tmpl.getStart() + 1 + (d.start || 0) });
                   }
                   return;

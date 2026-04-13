@@ -1,7 +1,7 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { Bobe2ts, SourceMapEntry } from './bobeToTs';
 import { log } from './global';
-import { isBobeTaggedTemplate } from './util';
+import { findPrecedingClassName, getClassMemberNames, isBobeTaggedTemplate } from './util';
 import { ParseError } from 'bobe';
 
 export interface VirtualDocumentResult {
@@ -30,7 +30,7 @@ export function buildVirtualDocument(sourceFile: ts.SourceFile, tss: typeof ts):
       const template = node.template;
       const raw = tss.isNoSubstitutionTemplateLiteral(template)
         ? (template.rawText ?? template.text)
-        : (template.head.rawText ?? template.head.text);
+        : (template.getText().slice(1, -1));
 
       // 模板内容在源文件中的起始 offset（反引号后第一个字符）
       const templateStartInSource = template.getStart() + 1; // +1 跳过反引号
@@ -66,36 +66,6 @@ export function buildVirtualDocument(sourceFile: ts.SourceFile, tss: typeof ts):
 
   log('虚拟文件\n', virtualCode);
   return { code: virtualCode, templates };
-}
-
-function findPrecedingClassName(targetNode: ts.Node, sourceFile: ts.SourceFile, tss: typeof ts): string | undefined {
-  let result: string | undefined;
-  function visit(node: ts.Node) {
-    if (node.pos >= targetNode.pos) return;
-    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name) {
-      result = node.name.text;
-    }
-    tss.forEachChild(node, visit);
-  }
-  visit(sourceFile);
-  return result;
-}
-
-function getClassMemberNames(className: string, sourceFile: ts.SourceFile, tss: typeof ts): string[] {
-  const names: string[] = [];
-  function visit(node: ts.Node) {
-    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name?.text === className) {
-      for (const member of node.members) {
-        if ((tss.isPropertyDeclaration(member) || tss.isMethodDeclaration(member)) && tss.isIdentifier(member.name)) {
-          names.push(member.name.text);
-        }
-      }
-      return;
-    }
-    tss.forEachChild(node, visit);
-  }
-  visit(sourceFile);
-  return names;
 }
 
 function buildIife(

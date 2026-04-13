@@ -10,6 +10,7 @@ import type {
   StaticValue,
   InterpolationNode
 } from 'bobe';
+import { log } from './global';
 
 export interface SourceMapEntry {
   /** 在模板字符串中的起始 offset（相对于模板内容开头，0-based） */
@@ -44,8 +45,26 @@ class Dent {
   }
 }
 
-const BRACE_REG = /^\$\{|^\{|\}$/g;
+const BRACE_REG = /(^\$\{)|(^\{)|(\}$)/g;
 const BOBE_PREFIX = '$Bobe';
+const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string, T> = {
+  [P in K]?: T;
+};
+type ${BOBE_PREFIX}BooleanProps = ${BOBE_PREFIX}ToMap<
+  'disabled' | 'checked' | 'selected' | 'readonly' | 'required' | 
+  'multiple' | 'hidden' | 'autofocus' | 'novalidate' | 'ismap' | 
+  'open' | 'reversed' | 'indeterminate', 
+  boolean|string|undefined|null
+>;
+type ${BOBE_PREFIX}NumericProps = ${BOBE_PREFIX}ToMap<
+  'style'|'value' | 'placeholder' | 'title' | 'alt' | 'width' | 'height' | 'columnCount' | 'tabIndex' | 'maxLength' | 
+  'minLength' | 'size' | 'rows' | 'cols' | 'span' | 'start' | 
+  'valueAsNumber' | 'max' | 'min' | 'step', 
+  string|number|undefined|null
+>;
+type ${BOBE_PREFIX}NativeProperties = ${BOBE_PREFIX}BooleanProps & ${BOBE_PREFIX}NumericProps;
+`;
+
 export class Bobe2ts {
   tokenizer: Tokenizer;
   compiler: Compiler;
@@ -73,21 +92,22 @@ export class Bobe2ts {
     return `a_${this.id}_${this.i}`;
   }
   get h() {
-    return `h_${this.id}_${this.i}`;
+    return `h_${this.id}`;
   }
   get t() {
-    return `t_${this.id}_${this.i}`;
+    return `t_${this.id}`;
   }
-  output = `type ${BOBE_PREFIX}CreateTextOrComponent = {
-${this.dent.v}(input: string): Text;
-${this.dent.v}<T>(input: (...args: any[]) => T): T;
-${this.dent.v}<T extends new (...args: any[]) => any>(input: T): T;
+  output = `${BOBE_DOM_PROP_TRANSFER}
+type ${BOBE_PREFIX}CreateTextOrComponent = {
+  (input: string): Text;
+  <T>(input: (...args: any[]) => T): T;
+  <T extends new (...args: any[]) => any>(input: T): T;
 };
-${this.dent.v}let ${this.h}!:<K extends keyof HTMLElementTagNameMap>(
-${this.dent.v}tag: K, 
-${this.dent.v}options?: ElementCreationOptions
-) => Omit<HTMLElementTagNameMap[K], 'textContent'|'style'> & { text: string, style: string };
-${this.dent.v}let t!: ${BOBE_PREFIX}CreateTextOrComponent;
+let ${this.h}!:<K extends keyof HTMLElementTagNameMap>(
+  tag: K, 
+  options?: ElementCreationOptions
+) => Omit<HTMLElementTagNameMap[K], keyof ${BOBE_PREFIX}NativeProperties |'textContent' > & { text: string|number|undefined|null } & ${BOBE_PREFIX}NativeProperties;
+let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
 `;
 
   constructor(
@@ -115,12 +135,15 @@ ${this.dent.v}let t!: ${BOBE_PREFIX}CreateTextOrComponent;
           const value = String(name.value);
           const isClass = value.match(/^\w+$/);
           const source = name.loc!.source!;
-          const sourceName = source.replace(BRACE_REG, ' ');
+          const sourceName = source.replace(BRACE_REG, match => {
+            if (match.length === 1) return ' ';
+            return '  ';
+          });
           if (isClass) {
             this.output += `${this.dent.v}let ${this.name}=new `;
             this.map(this.off(_node), this.output.length, source.length);
 
-            this.output += `${sourceName}()`;
+            this.output += `${sourceName}();`;
           }
           // 文本节点表达式
           else {
@@ -202,6 +225,8 @@ ${this.dent.v}let t!: ${BOBE_PREFIX}CreateTextOrComponent;
 
   process() {
     this.compiler.parseProgram();
+    // log('output', this.output);
+    // log('errors', this.compiler.errors.map(e => e.message).join('\n'));
     return {
       output: this.output,
       input: this.templateCode,
@@ -211,18 +236,13 @@ ${this.dent.v}let t!: ${BOBE_PREFIX}CreateTextOrComponent;
   }
 }
 
-// const p = new Bobe2ts(`
-// h2 text="测试"
-// input value={value} oninput={oninput} onkeyup={onkeyup}
-// for arr; item i
-//   div style="display: flex; align-items: center;"
-//     h1 onclick={() => delItem(i)}
-//       {item.value}
-//     input type="text"  oninput={(e) => updateItem(i, e.target.value)}
-// if show
-//   div
-//     {'哈哈哈'}
-// `);
+// const p = new Bobe2ts(
+//   0,
+//   `
+//     input value={he} style='width: 100px;' onclick={Mes}
+//     \${We} abc=1
+// `
+// );
 
 // const res = p.process();
 
