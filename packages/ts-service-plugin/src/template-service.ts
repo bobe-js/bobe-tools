@@ -1,8 +1,22 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { log } from './global';
-import { createMemo, findPrecedingClassName, getClassMemberNames, getVirtualName, inInsBrace, isOverlap } from './util';
-import { VirtualDocumentResult } from './buildVirtualDocument';
+import {
+  calcAbsSourceMap,
+  calcHeadSourceMap,
+  createMemo,
+  findPrecedingClassName,
+  fixTextSpan,
+  getClassMemberNames,
+  getRealName,
+  getVirtualName,
+  inInsBrace,
+  isOverlap,
+  isVirtualFile
+} from './util';
 import { sharedEntries, htmlData } from './data/webCustomData';
+import { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
+import { Position, VirtualDocumentResult } from './type';
+import { matchIdStart2 } from 'bobe-shared';
 
 /** BobeTemplateService 方法接收的最小 context 对象 */
 export interface BobeContext {
@@ -27,72 +41,68 @@ export class BobeTemplateService {
     public getVirtualResult: (virtualFileName: string) => VirtualDocumentResult
   ) {}
   // 这里的 position 是相对于模板内部的偏移量（0 是反引号后的第一个字符）
-  getCompletionsAtPosition(context: BobeContext, position: ts.LineAndCharacter): ts.CompletionInfo {
+  getCompletionsAtPosition(context: BobeContext, position: Position): ts.CompletionInfo {
     let entries: ts.CompletionEntry[] = [];
-    this._ls.getCompletionsAtPosition;
     // 1. 计算光标在 context.text 中的索引
     // 注意：TemplateContext 处理了换行，我们需要将 LineAndCharacter 转为 character offset
     const lines = context.text.split(/\n/);
     const currentLine = lines[position.line];
-    const prefix = currentLine.slice(0, position.character).trimStart();
+    const prefix = currentLine.slice(0, position.column).trimStart();
     log('当前行', currentLine);
     log('当前文件', context.fileName);
-    log('前置', currentLine.slice(0, position.character));
-    /*----------------- 输入位置为标签/关键字 -----------------*/
-    if (WHOLE_TEXT.test(prefix)) {
-      entries = this.getEntriesByTagPrefix(prefix);
-      return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
-    }
-    /*----------------- 输入位置为 dom 属性 -----------------*/
-    const quoteList = prefix.match(QUOTE) || [];
-    const keyMatch = prefix.match(PROP_TEXT);
-    const tagName = prefix.match(TAG_TEXT)?.[0];
-    if (quoteList.length % 2 === 0 && keyMatch && tagName) {
-      const propPrefix = keyMatch[1];
-      entries = this.getEntriesByTagPropPrefix(tagName + '.' + propPrefix);
+    log('前置', currentLine.slice(0, position.column));
 
-      return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
-    }
     /*----------------- 在 {} 内且当前字符不是 '.' -----------------*/
-    if (inInsBrace(context.text, position.character) && context.text[position.character] !== '.') {
-      const name = findPrecedingClassName(context.node, context.sf, this.tss);
-      if (name) {
-        const keys = getClassMemberNames(name, context.sf, this.tss);
-        entries = keys.map((key, i) => ({
-          name: key,
-          kind: this.tss.ScriptElementKind.memberVariableElement,
-          sortText: `00000000${i}${key}`
-        }));
+    if (inInsBrace(currentLine, position.column)) {
+      const curr = currentLine[position.column - 1];
+      if (!['.', '"', "'"].some(c => c === curr)) {
+        const name = findPrecedingClassName(context.node, context.sf, this.tss);
+        if (name) {
+          const keys = getClassMemberNames(name, context.sf, this.tss);
+          entries = keys.map((key, i) => ({
+            name: key.name!.getText(),
+            kind: this.tss.ScriptElementKind.memberVariableElement,
+            sortText: `00000000${i}${key}`
+          }));
+        }
+        return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
       }
-      return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
+    } else {
+      /*----------------- 输入位置为标签/关键字 -----------------*/
+      if (WHOLE_TEXT.test(prefix)) {
+        entries = this.getEntriesByTagPrefix(prefix);
+        return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
+      }
+      /*----------------- 输入位置为 dom 属性 -----------------*/
+      const quoteList = prefix.match(QUOTE) || [];
+      const keyMatch = prefix.match(PROP_TEXT);
+      const tagName = prefix.match(TAG_TEXT)?.[0];
+      if (quoteList.length % 2 === 0 && keyMatch && tagName) {
+        const propPrefix = keyMatch[1];
+        entries = this.getEntriesByTagPropPrefix(tagName + '.' + propPrefix);
+
+        return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
+      }
     }
 
     /*----------------- 其余情况使用 虚拟文档模拟 -----------------*/
     const vFileName = getVirtualName(context.fileName);
 
     // 计算光标在模板字符串内的绝对 offset
-    const cursorOffset = lines.slice(0, position.line).reduce((sum, l) => sum + l.length + 1, 0) + position.character;
+    const cursorOffset = position.offset;
 
     // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
     const { templates } = this.getVirtualResult(vFileName);
-    let virtualOffset: number | undefined;
-    outer: for (const tmpl of templates) {
-      for (const entry of tmpl.sourceMap) {
-        if (cursorOffset >= entry.templateOffset && cursorOffset <= entry.templateOffset + entry.length) {
-          virtualOffset = tmpl.iifeStartInVirtual! + entry.codeOffset + (cursorOffset - entry.templateOffset);
-          break outer;
-        }
-      }
-    }
+    const map = calcAbsSourceMap(cursorOffset, templates);
 
-    log('cursorOffset', String(cursorOffset));
-    log('virtualOffset', String(virtualOffset));
-
-    if (virtualOffset === undefined) {
+    if (map === undefined) {
       return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries: [] };
     }
 
-    const comp = this._ls.getCompletionsAtPosition(vFileName, virtualOffset, undefined);
+    log('cursorOffset', String(cursorOffset));
+    log('virtualOffset', String(map.virtualOffset));
+
+    const comp = this._ls.getCompletionsAtPosition(vFileName, map.virtualOffset, undefined);
     log('虚拟文档模拟', JSON.stringify(comp?.entries[0], undefined, 2));
     log('是否有 hello', String(Boolean(comp?.entries.find(it => it.name === 'hello'))));
 
@@ -101,6 +111,98 @@ export class BobeTemplateService {
       isMemberCompletion: false,
       isNewIdentifierLocation: false,
       entries: comp?.entries || []
+    };
+  }
+
+  getQuickInfoAtPosition(context: BobeContext, position: Position): ts.QuickInfo | undefined {
+    const lines = context.text.split(/\n/);
+    const currentLine = lines[position.line];
+    const vFileName = getVirtualName(context.fileName);
+
+    // 计算光标在模板字符串内的绝对 offset
+    const cursorOffset = position.offset;
+
+    // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
+    const { templates, code } = this.getVirtualResult(vFileName);
+    const map = calcAbsSourceMap(cursorOffset, templates);
+    if (map === undefined) {
+      return undefined;
+    }
+
+    const quickInfo = this._ls.getQuickInfoAtPosition(vFileName, map.virtualOffset);
+    if (!quickInfo) return undefined;
+    const newSpan = fixTextSpan(quickInfo.textSpan, code, map);
+    return {
+      ...quickInfo,
+      textSpan: newSpan
+    };
+  }
+  getDefinitionAndBoundSpan(context: BobeContext, position: Position): DefinitionInfoAndBoundSpan | undefined {
+    const lines = context.text.split(/\n/);
+    const currentLine = lines[position.line];
+    const vFileName = getVirtualName(context.fileName);
+
+    // 计算光标在模板字符串内的绝对 offset
+    const cursorOffset = position.offset;
+
+    // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
+    const { templates, sf, code } = this.getVirtualResult(vFileName);
+    const map = calcAbsSourceMap(cursorOffset, templates);
+    if (map === undefined) {
+      return undefined;
+    }
+    log(code);
+    const defineInfo = this._ls.getDefinitionAndBoundSpan(vFileName, map.virtualOffset);
+    if (!defineInfo || !defineInfo.definitions) return undefined;
+    const definitions: ts.DefinitionInfo[] = [];
+    for (const item of defineInfo.definitions) {
+      let { fileName, textSpan, ...def } = item;
+      let inVirtualPart = false;
+      // 默认任务虚拟文档就是当前文档对应的那个虚拟文档
+      if (isVirtualFile(fileName)) {
+        /*----------------- 在虚拟部分 -----------------*/
+        if ((inVirtualPart = textSpan.start > sf!.getFullWidth())) {
+          const map = calcHeadSourceMap(textSpan.start, templates);
+          if (map) {
+            const { definitions: subDefs } = this._ls.getDefinitionAndBoundSpan(vFileName, map.virtualOffset) || {};
+            subDefs?.forEach(subDef => {
+              definitions.push({
+                ...subDef,
+                fileName: getRealName(subDef.fileName)
+              });
+            });
+          }
+          // 在 head 中找不到的映射，可能映射到了 for 的 item i 表达式，将它们转为模板中的偏移
+          else {
+            const forMap = calcAbsSourceMap(textSpan.start, templates, true, true);
+            if (forMap) {
+              definitions.push({
+                fileName: getRealName(fileName),
+                textSpan: { start: forMap.originStart, length: forMap.length },
+                kind: this.tss.ScriptElementKind.constElement,
+                name: code.slice(forMap.originStart, forMap.originStart + forMap.length),
+                containerKind: this.tss.ScriptElementKind.functionElement,
+                containerName: 'bobeForLoop'
+              });
+            }
+          }
+        }
+        fileName = getRealName(fileName);
+      }
+
+      if (!inVirtualPart) {
+        const defInfo = {
+          fileName,
+          textSpan,
+          ...def
+        };
+        definitions.push(defInfo);
+      }
+    }
+    const newSpan = fixTextSpan(defineInfo.textSpan, code, map);
+    return {
+      definitions,
+      textSpan: newSpan
     };
   }
 
@@ -167,9 +269,9 @@ export class BobeTemplateService {
         const entryVirtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
         const entryVirtualEnd = entryVirtualStart + entry.length;
         if (isOverlap(entryVirtualStart, entryVirtualEnd, diag.start, diag.start + mappedLength)) {
-          templateRelativeOffset = entry.templateOffset;
+          templateRelativeOffset = entry.originOffset;
           mappedLength = Math.min(mappedLength, entry.length - (diag.start - entryVirtualStart));
-          result.push({ ...diag, start: entry.templateOffset, length: entry.length });
+          result.push({ ...diag, start: entry.originOffset, length: entry.length });
           break;
         }
       }
@@ -202,7 +304,7 @@ export class BobeTemplateService {
     });
   }
 
-  // getCompletionEntryDetails(context: TemplateContext, position: ts.LineAndCharacter, name: string) {
+  // getCompletionEntryDetails(context: TemplateContext, position: Position, name: string) {
   //   // 根据 name 返回不同的文档描述
   //   const documentation = this.getDocByName(name);
 

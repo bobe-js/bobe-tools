@@ -1,5 +1,8 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
-import { Virtual_File_Exp, Virtual_File_Suffix } from "./global";
+import { Virtual_File_Exp, Virtual_File_Suffix } from './global';
+import { AbsMap, BobeTemplateInfo, SourceMapEntry } from './type';
+import { jsVarRegexp, matchId, matchIdStart2 } from 'bobe-shared';
+import { SourceLocation } from 'bobe';
 
 export function isBobeTaggedTemplate(node: ts.TaggedTemplateExpression, tss: typeof ts): boolean {
   return tss.isIdentifier(node.tag) && node.tag.text === 'bobe';
@@ -81,12 +84,12 @@ export function getRealName(virtualFileName: string) {
 }
 
 export function isVirtualFile(fileName: string) {
-  return fileName.match(Virtual_File_Exp)
+  return fileName.match(Virtual_File_Exp);
 }
 
 /**
  * s1    e1
- * 0  1 
+ * 0  1
  *    1  2
  *    s2    e2
  */
@@ -96,45 +99,49 @@ export function isOverlap(start1: number, end1: number, start2: number, end2: nu
 
 /** 判断在 {} 内 */
 export function inInsBrace(content: string, targetIndex: number): boolean {
-    let stack: ("block" | "expression")[] = [];
+  let stack: ('block' | 'expression')[] = [];
 
-    for (let i = 0; i < content.length; i++) {
-        // 在检查状态之前，先判断是否到达了目标索引
-        if (i === targetIndex) {
-            // 判断标准：
-            // 1. 栈不为空（表示在某类括号内）
-            // 2. 栈顶必须是 'block'，不能是 'expression'
-            return stack.length > 0 && stack[stack.length - 1] === "block";
-        }
-
-        const char = content[i];
-        const nextChar = content[i + 1];
-
-        // 1. 识别 ${
-        if (char === '$' && nextChar === '{') {
-            stack.push("expression");
-            i++; // 跳过 '{'，避免下次循环重复处理
-            continue;
-        }
-
-        // 2. 识别普通的 {
-        if (char === '{') {
-            stack.push("block");
-            continue;
-        }
-
-        // 3. 识别 }
-        if (char === '}') {
-            stack.pop();
-            continue;
-        }
+  for (let i = 0; i < content.length; i++) {
+    // 在检查状态之前，先判断是否到达了目标索引
+    if (i === targetIndex) {
+      // 判断标准：
+      // 1. 栈不为空（表示在某类括号内）
+      // 2. 栈顶必须是 'block'，不能是 'expression'
+      return stack.length > 0 && stack[stack.length - 1] === 'block';
     }
 
-    return false;
+    const char = content[i];
+    const nextChar = content[i + 1];
+
+    // 1. 识别 ${
+    if (char === '$' && nextChar === '{') {
+      stack.push('expression');
+      i++; // 跳过 '{'，避免下次循环重复处理
+      continue;
+    }
+
+    // 2. 识别普通的 {
+    if (char === '{') {
+      stack.push('block');
+      continue;
+    }
+
+    // 3. 识别 }
+    if (char === '}') {
+      stack.pop();
+      continue;
+    }
+  }
+
+  return false;
 }
 
 /** 获取当前节点最近的类名 */
-export function findPrecedingClassName(targetNode: ts.Node, sourceFile: ts.SourceFile, tss: typeof ts): string | undefined {
+export function findPrecedingClassName(
+  targetNode: ts.Node,
+  sourceFile: ts.SourceFile,
+  tss: typeof ts
+): string | undefined {
   let result: string | undefined;
   function visit(node: ts.Node) {
     if (node.pos >= targetNode.pos) return;
@@ -147,13 +154,13 @@ export function findPrecedingClassName(targetNode: ts.Node, sourceFile: ts.Sourc
   return result;
 }
 /** 根据类名获取成员名称列表 */
-export function getClassMemberNames(className: string, sourceFile: ts.SourceFile, tss: typeof ts): string[] {
-  const names: string[] = [];
+export function getClassMemberNames(className: string, sourceFile: ts.SourceFile, tss: typeof ts): ts.ClassElement[] {
+  const names: ts.ClassElement[] = [];
   function visit(node: ts.Node) {
     if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name?.text === className) {
       for (const member of node.members) {
         if ((tss.isPropertyDeclaration(member) || tss.isMethodDeclaration(member)) && tss.isIdentifier(member.name)) {
-          names.push(member.name.text);
+          names.push(member);
         }
       }
       return;
@@ -163,3 +170,153 @@ export function getClassMemberNames(className: string, sourceFile: ts.SourceFile
   visit(sourceFile);
   return names;
 }
+
+export function calcAbsSourceMap(
+  _cursorOffset: number,
+  templates: BobeTemplateInfo[],
+  isAbsCursor = false,
+  isVirtualCursor = false
+) {
+  let virtualStart: number | undefined;
+  let originStart: number, length: number;
+  const compareKey = isVirtualCursor ? 'codeOffset' : 'originOffset';
+  for (const tmpl of templates) {
+    const cursorOffset = isAbsCursor ? _cursorOffset - tmpl.iifeStartInVirtual! : _cursorOffset;
+    for (const entry of tmpl.sourceMap) {
+      if (cursorOffset >= entry[compareKey] && cursorOffset <= entry[compareKey] + entry.length) {
+        virtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
+        originStart = tmpl.templateStartInSource + entry.originOffset;
+        const dt = cursorOffset - entry.originOffset;
+        length = entry.length;
+        return {
+          virtualStart,
+          originStart,
+          virtualOffset: virtualStart + dt,
+          originOffset: originStart + dt,
+          length
+        };
+      }
+    }
+  }
+}
+/** 计算的是 IIFE 中 解构的 所有类成员的 映射*/
+export function calcHeadSourceMap(absCursorOffset: number, templates: BobeTemplateInfo[]) {
+  let virtualStart: number | undefined;
+  let originStart: number, length: number;
+  for (const tmpl of templates) {
+    for (const entry of tmpl.headMap) {
+      const cursorOffset = absCursorOffset - tmpl.iifeStartInVirtual!;
+      if (cursorOffset >= entry.codeOffset && cursorOffset <= entry.codeOffset + entry.length) {
+        virtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
+        originStart = entry.originOffset;
+        const dt = cursorOffset - entry.codeOffset;
+        length = entry.length;
+        return {
+          virtualStart,
+          originStart,
+          virtualOffset: virtualStart + dt,
+          originOffset: originStart + dt,
+          length
+        };
+      }
+    }
+  }
+}
+
+/**
+ * 1. 插值表达式中的 js 标识符 如 tag prop={ a ? foo : bar } 中的 bar
+ * 2. 完整的标识符，如 tag prop=xxx 中的 prop
+ */
+export function fixTextSpan(textSpan: ts.TextSpan, code: string, map: AbsMap) {
+  const originalCode = code.slice(map.originStart, map.length);
+  /** 当内容为 js 标识符 且 textSpan 是插值表达式中的一部分时
+   * span.start ~ virtualOffset 和
+   * targetStart ~ originOffset 是相同的
+   * 因此 targetStart = originOffset - (virtualOffset - span.start)
+   */
+  if (textSpan.length < map.length && !originalCode.match(domPropertyExp)) {
+    const { start, length } = textSpan;
+    const targetStart = map.originOffset - (map.virtualOffset - start);
+    return { start: targetStart, length };
+  }
+
+  // 其余情况直接返回完整的原始标识符
+  return { start: map.originStart, length: map.length };
+}
+
+export function getPosTemplateCtx(
+  info: ts.server.PluginCreateInfo,
+  tss: typeof ts,
+  fileName: string,
+  position: number
+) {
+  const sf = info.languageService.getProgram()?.getSourceFile(fileName);
+  if (!sf) return null;
+  const node = findNodeAtPosition(tss, sf, position);
+  if (!node) return null;
+  const templateNode = getValidBobeTemplateNode(tss, node);
+  if (!templateNode || position <= templateNode.pos) return null;
+  const baseOffset = templateNode.getStart() + 1;
+  const ctx = makeContext(templateNode, sf, fileName, baseOffset);
+  const relPos = getRelativePosition(info, baseOffset, fileName, position);
+  return { ctx, relPos: relPos as SourceLocation['start'] };
+}
+
+// 判断节点是否属于 bobe 标签模板，返回模板字面量节点
+export function getValidBobeTemplateNode(tss: typeof ts, node: ts.Node): ts.TemplateLiteral | undefined {
+  switch (node.kind) {
+    case tss.SyntaxKind.TaggedTemplateExpression: {
+      const t = node as ts.TaggedTemplateExpression;
+      return isBobeTaggedTemplate(t, tss) ? t.template : undefined;
+    }
+    case tss.SyntaxKind.NoSubstitutionTemplateLiteral: {
+      const p = node.parent;
+      return p && tss.isTaggedTemplateExpression(p) && isBobeTaggedTemplate(p, tss)
+        ? (node as ts.NoSubstitutionTemplateLiteral)
+        : undefined;
+    }
+    case tss.SyntaxKind.TemplateHead:
+      return node.parent?.parent ? getValidBobeTemplateNode(tss, node.parent.parent) : undefined;
+    case tss.SyntaxKind.TemplateMiddle:
+    case tss.SyntaxKind.TemplateTail:
+      return node.parent?.parent?.parent ? getValidBobeTemplateNode(tss, node.parent.parent.parent) : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** 将文件绝对 offset 转换为相对模板开头 ` 的偏移量 */
+export function getRelativePosition(
+  info: ts.server.PluginCreateInfo,
+  baseOffset: number,
+  fileName: string,
+  position: number
+): SourceLocation['start'] {
+  const scriptInfo = info.project.getScriptInfo(fileName);
+  if (!scriptInfo) return { line: 0, column: 0, offset: position - baseOffset };
+  const baseLoc = scriptInfo.positionToLineOffset(baseOffset); // 1-based
+  const cursorLoc = scriptInfo.positionToLineOffset(position);
+  const bl = baseLoc.line - 1,
+    bc = baseLoc.offset - 1;
+  const cl = cursorLoc.line - 1,
+    cc = cursorLoc.offset - 1;
+  return { line: cl - bl, column: cl === bl ? cc - bc : cc, offset: position - baseOffset };
+}
+
+// 构造最小 context 对象（BobeTemplateService 只用 node、fileName、text）
+export function makeContext(templateNode: ts.TemplateLiteral, sf: ts.SourceFile, fileName: string, baseOffset: number) {
+  return { node: templateNode, fileName, text: templateNode.getText().slice(1, -1), sf, baseOffset };
+}
+
+// 在 AST 中找到 position 处最深的节点
+export function findNodeAtPosition(tss: typeof ts, sf: ts.SourceFile, position: number): ts.Node | undefined {
+  function find(node: ts.Node): ts.Node | undefined {
+    if (position >= node.getStart() && position < node.getEnd()) {
+      return tss.forEachChild(node, find) || node;
+    }
+    return undefined;
+  }
+  return find(sf);
+}
+
+export const domPropertyExp = /^[a-zA-Z][\w-]*$/;

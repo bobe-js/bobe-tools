@@ -1,8 +1,9 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { BobeTemplateService } from './template-service';
 import { G } from './global';
-import { getVirtualName, isVirtualFile, getRealName, isBobeTaggedTemplate } from './util';
-import { buildVirtualDocument, VirtualDocumentResult } from './buildVirtualDocument';
+import { getVirtualName, isVirtualFile, getRealName, getPosTemplateCtx, getValidBobeTemplateNode, makeContext } from './util';
+import { buildVirtualDocument } from './buildVirtualDocument';
+import { VirtualDocumentResult } from './type';
 
 export default (modules: { typescript: typeof ts }) => {
   return {
@@ -24,7 +25,7 @@ export default (modules: { typescript: typeof ts }) => {
         if (cached && cached.version === version) return cached.result;
         const sourceFile = info.languageService.getProgram()?.getSourceFile(realFileName);
         if (!sourceFile) {
-          return { code: '', templates: [] };
+          return { code: '', templates: [],  sf: sourceFile };
         }
         const result = buildVirtualDocument(sourceFile, tss);
         virtualDocCache.set(virtualFileName, { result, version });
@@ -90,79 +91,35 @@ export default (modules: { typescript: typeof ts }) => {
 
       // ---- 自己实现 decorator 逻辑，不依赖 typescript-template-language-service-decorator ----
 
-      // 在 AST 中找到 position 处最深的节点
-      function findNodeAtPosition(sf: ts.SourceFile, position: number): ts.Node | undefined {
-        function find(node: ts.Node): ts.Node | undefined {
-          if (position >= node.getStart() && position < node.getEnd()) {
-            return tss.forEachChild(node, find) || node;
-          }
-          return undefined;
-        }
-        return find(sf);
-      }
-
-      // 判断节点是否属于 bobe 标签模板，返回模板字面量节点
-      function getValidBobeTemplateNode(node: ts.Node): ts.TemplateLiteral | undefined {
-        switch (node.kind) {
-          case tss.SyntaxKind.TaggedTemplateExpression: {
-            const t = node as ts.TaggedTemplateExpression;
-            return isBobeTaggedTemplate(t, tss) ? t.template : undefined;
-          }
-          case tss.SyntaxKind.NoSubstitutionTemplateLiteral: {
-            const p = node.parent;
-            return p && tss.isTaggedTemplateExpression(p) && isBobeTaggedTemplate(p, tss)
-              ? (node as ts.NoSubstitutionTemplateLiteral)
-              : undefined;
-          }
-          case tss.SyntaxKind.TemplateHead:
-            return node.parent?.parent ? getValidBobeTemplateNode(node.parent.parent) : undefined;
-          case tss.SyntaxKind.TemplateMiddle:
-          case tss.SyntaxKind.TemplateTail:
-            return node.parent?.parent?.parent ? getValidBobeTemplateNode(node.parent.parent.parent) : undefined;
-          default:
-            return undefined;
-        }
-      }
-
-      // 将文件绝对 offset 转为模板相对 LineAndCharacter
-      function getRelativePosition(
-        templateNode: ts.TemplateLiteral,
-        fileName: string,
-        position: number
-      ): ts.LineAndCharacter {
-        const scriptInfo = info.project.getScriptInfo(fileName);
-        if (!scriptInfo) return { line: 0, character: 0 };
-        const baseOffset = templateNode.getStart() + 1;
-        const baseLoc = scriptInfo.positionToLineOffset(baseOffset); // 1-based
-        const cursorLoc = scriptInfo.positionToLineOffset(position);
-        const bl = baseLoc.line - 1,
-          bc = baseLoc.offset - 1;
-        const cl = cursorLoc.line - 1,
-          cc = cursorLoc.offset - 1;
-        return { line: cl - bl, character: cl === bl ? cc - bc : cc };
-      }
-
-      // 构造最小 context 对象（BobeTemplateService 只用 node、fileName、text）
-      function makeContext(templateNode: ts.TemplateLiteral, sf: ts.SourceFile, fileName: string) {
-        return { node: templateNode, fileName, text: templateNode.getText().slice(1, -1), sf };
-      }
-
       // 代理原始 info.languageService，拦截模板相关方法
       // getProgram 不拦截 → 返回原始 program（不含虚拟文件）→ tsserver 不崩溃
       return new Proxy(info.languageService, {
-        get(target, prop, receiver) {
+        get(target: ts.LanguageService, prop, receiver) {
           if (prop === 'getCompletionsAtPosition') {
             return (fileName: string, position: number, options: any) => {
-              const sf = info.languageService.getProgram()?.getSourceFile(fileName);
-              if (!sf) return target.getCompletionsAtPosition(fileName, position, options);
-              const node = findNodeAtPosition(sf, position);
-              if (!node) return target.getCompletionsAtPosition(fileName, position, options);
-              const templateNode = getValidBobeTemplateNode(node);
-              if (!templateNode || position <= templateNode.pos)
+              const res = getPosTemplateCtx(info, tss, fileName, position);
+              if (!res) {
                 return target.getCompletionsAtPosition(fileName, position, options);
-              const ctx = makeContext(templateNode, sf, fileName);
-              const relPos = getRelativePosition(templateNode, fileName, position);
-              return templateService.getCompletionsAtPosition(ctx as any, relPos);
+              }
+              return templateService.getCompletionsAtPosition(res.ctx as any, res.relPos);
+            };
+          }
+          if (prop === 'getQuickInfoAtPosition') {
+            return (fileName: string, position: number, options: any) => {
+              const res = getPosTemplateCtx(info, tss, fileName, position);
+              if (!res) {
+                return target.getQuickInfoAtPosition(fileName, position, options);
+              }
+              return templateService.getQuickInfoAtPosition(res.ctx as any, res.relPos);
+            };
+          }
+          if (prop === 'getDefinitionAndBoundSpan') {
+            return (fileName: string, position: number) => {
+              const res = getPosTemplateCtx(info, tss, fileName, position);
+              if (!res) {
+                return target.getDefinitionAndBoundSpan(fileName, position);
+              }
+              return templateService.getDefinitionAndBoundSpan(res.ctx as any, res.relPos);
             };
           }
 
@@ -173,12 +130,13 @@ export default (modules: { typescript: typeof ts }) => {
               if (!sf) return baseDiags;
               const templateDiags: ts.Diagnostic[] = [];
               function visit(node: ts.Node) {
-                const tmpl = getValidBobeTemplateNode(node);
+                const tmpl = getValidBobeTemplateNode(tss, node);
                 if (tmpl) {
-                  const ctx = makeContext(tmpl, sf!, fileName);
+                  const baseOffset = tmpl.getStart() + 1;
+                  const ctx = makeContext(tmpl, sf!, fileName, baseOffset);
                   const rawDiags = templateService.getSemanticDiagnostics(ctx as any);
                   for (const d of rawDiags) {
-                    templateDiags.push({ ...d, start: tmpl.getStart() + 1 + (d.start || 0) });
+                    templateDiags.push({ ...d, start: baseOffset + (d.start || 0) });
                   }
                   return;
                 }
@@ -196,11 +154,12 @@ export default (modules: { typescript: typeof ts }) => {
               if (!sf) return baseDiags;
               const templateDiags: ts.Diagnostic[] = [];
               function visit(node: ts.Node) {
-                const tmpl = getValidBobeTemplateNode(node);
+                const tmpl = getValidBobeTemplateNode(tss, node);
                 if (tmpl) {
-                  const ctx = makeContext(tmpl, sf!, fileName);
+                  const baseOffset = tmpl.getStart() + 1;
+                  const ctx = makeContext(tmpl, sf!, fileName, baseOffset);
                   for (const d of templateService.getSyntacticDiagnostics(ctx as any)) {
-                    templateDiags.push({ ...d, start: tmpl.getStart() + 1 + (d.start || 0) });
+                    templateDiags.push({ ...d, start: baseOffset + 1 + (d.start || 0) });
                   }
                   return;
                 }
@@ -217,3 +176,4 @@ export default (modules: { typescript: typeof ts }) => {
     }
   };
 };
+
