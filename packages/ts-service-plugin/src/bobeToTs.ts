@@ -38,8 +38,8 @@ class Dent {
 }
 
 const BRACE_REG = /(^\$\{)|(^\{)|(\}$)/g;
-const BOBE_PREFIX = '$Bobe';
-const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string, T> = {
+export const BOBE_PREFIX = '$Bobe';
+export const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string, T> = {
   [P in K]?: T;
 };
 type ${BOBE_PREFIX}BooleanProps = ${BOBE_PREFIX}ToMap<
@@ -55,6 +55,11 @@ type ${BOBE_PREFIX}NumericProps = ${BOBE_PREFIX}ToMap<
   string|number|undefined|null
 >;
 type ${BOBE_PREFIX}NativeProperties = ${BOBE_PREFIX}BooleanProps & ${BOBE_PREFIX}NumericProps;
+type ${BOBE_PREFIX}CreateTextOrComponent = {
+  <T>(input: (...args: any[]) => T): T;
+  <T extends new (...args: any[]) =>any>(input: T): InstanceType<T>;
+  (input: any): Text;
+};
 `;
 
 export class Bobe2ts {
@@ -73,40 +78,15 @@ export class Bobe2ts {
     /** 表达式的字符长度 */
     length: number
   ) {
-    this.res.sourceMap.push({ originOffset: templateOffset, codeOffset: this.iiefHeadLength + codeOffset, length });
+    this.res.sourceMap.push({ originOffset: templateOffset, codeOffset: this.iifePrefixLength + codeOffset, length });
   }
   dent = new Dent(2);
   lines: string[] = [];
-  id = Date.now().toString(36);
-  i = 0;
-  gdt = 0;
-  get name() {
-    return `a_${this.id}_${this.i}`;
-  }
-  get h() {
-    return `h_${this.id}`;
-  }
-  get t() {
-    return `t_${this.id}`;
-  }
-  get k() {
-    return `k_${this.id}`;
-  }
-  output = `${BOBE_DOM_PROP_TRANSFER}
-type ${BOBE_PREFIX}CreateTextOrComponent = {
-  <T>(input: (...args: any[]) => T): T;
-  <T extends new (...args: any[]) =>any>(input: T): InstanceType<T>;
-  (input: any): Text;
-};
-let ${this.h}!:<K extends keyof HTMLElementTagNameMap>(
-  tag: K, 
-  options?: ElementCreationOptions
-) => Omit<HTMLElementTagNameMap[K], keyof ${BOBE_PREFIX}NativeProperties |'textContent' > & { text: string|number|undefined|null } & ${BOBE_PREFIX}NativeProperties & Record<string, any>;
-let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
-`;
+  output = ``;
 
   constructor(
-    public iiefHeadLength: number,
+    public idg: IdGenerator,
+    public iifePrefixLength: number,
     public templateCode: string
   ) {
     const tokenizer = (this.tokenizer = new Tokenizer(() => undefined, false));
@@ -115,12 +95,12 @@ let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
       parseElementNode: {
         propsAdded: node => {
           const _node = node!;
-          this.output += `${this.dent.v}let ${this.name}=${this.h}('`;
+          this.output += `${this.dent.v}let ${this.idg.name}=${this.idg.h}('`;
           this.map(this.off(_node), this.output.length, _node.tagName.length);
           this.output += `${_node.tagName}');`;
           this.createSetPropsExp(_node.props);
           this.output += `\n`;
-          this.i++;
+          this.idg.i++;
         }
       },
       parseComponentNode: {
@@ -135,20 +115,20 @@ let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
             return '  ';
           });
           // if (isClass) {
-          //   this.output += `${this.dent.v}let ${this.name}=new `;
+          //   this.output += `${this.dent.v}let ${this.idg.name}=new `;
           //   this.map(this.off(_node), this.output.length, source.length);
 
           //   this.output += `${sourceName}();`;
           // }
           // // 文本节点表达式
           // else {
-          this.output += `${this.dent.v}let ${this.name}=${this.t}(`;
+          this.output += `${this.dent.v}let ${this.idg.name}=${this.idg.t}(`;
           this.map(this.off(_node), this.output.length, source.length);
           this.output += `${sourceName});`;
           // }
           this.createSetPropsExp(_node.props);
           this.output += `\n`;
-          this.i++;
+          this.idg.i++;
         }
       },
       parseConditionalNode: {
@@ -183,7 +163,7 @@ let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
           }
           this.output += `)=>{`;
           if (key) {
-            this.output += `let ${this.k}=`;
+            this.output += `let ${this.idg.k}=`;
             this.map(this.off(key), this.output.length, key.loc!.source!.length);
             this.output += key.loc!.source + ';';
           }
@@ -202,7 +182,7 @@ let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
     return n.loc!.start.offset - 1;
   }
   createSetPropsExp = (props: Property[]) => {
-    const { name } = this;
+    const { name } = this.idg;
     const nameDot = `${name}.`;
     props.forEach(prop => {
       const loc = prop.key.loc!;
@@ -245,7 +225,25 @@ let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
   }
 }
 
+export class IdGenerator {
+  id = Date.now().toString(36);
+  i = 0;
+   get name() {
+    return `a_${this.id}_${this.i}`;
+  }
+  get h() {
+    return `h_${this.id}`;
+  }
+  get t() {
+    return `t_${this.id}`;
+  }
+  get k() {
+    return `k_${this.id}`;
+  }
+}
+
 // const p = new Bobe2ts(
+//   new IdGenerator(),
 //   0,
 //   `
 //     input value={he} style='width: 100px;' onclick={Mes}
@@ -256,7 +254,7 @@ let ${this.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
 // const res = p.process();
 
 // const { input, output, sourceMap } = res;
-// let verify = sourceMap.map(({ templateOffset: inOffset, codeOffset: outOffset, length }) => {
+// let verify = sourceMap.map(({ originOffset: inOffset, codeOffset: outOffset, length }) => {
 //   return {
 //     _in: input.slice(inOffset, inOffset + length),
 //     out: output.slice(outOffset, outOffset + length)

@@ -17,7 +17,7 @@ export type BobeTemplateInfo = {
   headMap: SourceMapEntry[];
   /** 该模板对应的 IIFE 块在虚拟文档中的起始 offset */
   iifeStartInVirtual?: number;
-  iifeCode?: string;
+  iifeCodeIndex?: number;
   errors: ParseError[];
 };
 

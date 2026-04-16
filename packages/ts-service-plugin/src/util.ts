@@ -172,21 +172,22 @@ export function getClassMemberNames(className: string, sourceFile: ts.SourceFile
 }
 
 export function calcAbsSourceMap(
-  _cursorOffset: number,
+  cursorOffset: number,
   templates: BobeTemplateInfo[],
-  isAbsCursor = false,
   isVirtualCursor = false
 ) {
   let virtualStart: number | undefined;
   let originStart: number, length: number;
   const compareKey = isVirtualCursor ? 'codeOffset' : 'originOffset';
+  const baseKey = isVirtualCursor ? 'iifeStartInVirtual' : 'templateStartInSource';
   for (const tmpl of templates) {
-    const cursorOffset = isAbsCursor ? _cursorOffset - tmpl.iifeStartInVirtual! : _cursorOffset;
     for (const entry of tmpl.sourceMap) {
-      if (cursorOffset >= entry[compareKey] && cursorOffset <= entry[compareKey] + entry.length) {
+      const eStart = tmpl[baseKey]!+entry[compareKey]
+      const eEnd = eStart + entry.length;
+      if (cursorOffset >= eStart && cursorOffset <= eEnd) {
         virtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
         originStart = tmpl.templateStartInSource + entry.originOffset;
-        const dt = cursorOffset - entry.originOffset;
+        const dt = cursorOffset - eStart;
         length = entry.length;
         return {
           virtualStart,
@@ -228,7 +229,7 @@ export function calcHeadSourceMap(absCursorOffset: number, templates: BobeTempla
  * 2. 完整的标识符，如 tag prop=xxx 中的 prop
  */
 export function fixTextSpan(textSpan: ts.TextSpan, code: string, map: AbsMap) {
-  const originalCode = code.slice(map.originStart, map.length);
+  const originalCode = code.slice(map.originStart, map.originStart + map.length);
   /** 当内容为 js 标识符 且 textSpan 是插值表达式中的一部分时
    * span.start ~ virtualOffset 和
    * targetStart ~ originOffset 是相同的
@@ -258,7 +259,7 @@ export function getPosTemplateCtx(
   if (!templateNode || position <= templateNode.pos) return null;
   const baseOffset = templateNode.getStart() + 1;
   const ctx = makeContext(templateNode, sf, fileName, baseOffset);
-  const relPos = getRelativePosition(info, baseOffset, fileName, position);
+  const relPos = getRelativePosition(info, baseOffset, fileName, position);// 这里找到了相对第二个模板的开始位置
   return { ctx, relPos: relPos as SourceLocation['start'] };
 }
 

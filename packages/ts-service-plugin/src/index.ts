@@ -101,7 +101,7 @@ export default (modules: { typescript: typeof ts }) => {
               if (!res) {
                 return target.getCompletionsAtPosition(fileName, position, options);
               }
-              return templateService.getCompletionsAtPosition(res.ctx as any, res.relPos);
+              return templateService.getCompletionsAtPosition(res.ctx as any, res.relPos, position);
             };
           }
           if (prop === 'getQuickInfoAtPosition') {
@@ -110,7 +110,7 @@ export default (modules: { typescript: typeof ts }) => {
               if (!res) {
                 return target.getQuickInfoAtPosition(fileName, position, options);
               }
-              return templateService.getQuickInfoAtPosition(res.ctx as any, res.relPos);
+              return templateService.getQuickInfoAtPosition(res.ctx as any, res.relPos, position);
             };
           }
           if (prop === 'getDefinitionAndBoundSpan') {
@@ -119,7 +119,7 @@ export default (modules: { typescript: typeof ts }) => {
               if (!res) {
                 return target.getDefinitionAndBoundSpan(fileName, position);
               }
-              return templateService.getDefinitionAndBoundSpan(res.ctx as any, res.relPos);
+              return templateService.getDefinitionAndBoundSpan(res.ctx as any, res.relPos, position);
             };
           }
 

@@ -41,7 +41,7 @@ export class BobeTemplateService {
     public getVirtualResult: (virtualFileName: string) => VirtualDocumentResult
   ) {}
   // 这里的 position 是相对于模板内部的偏移量（0 是反引号后的第一个字符）
-  getCompletionsAtPosition(context: BobeContext, position: Position): ts.CompletionInfo {
+  getCompletionsAtPosition(context: BobeContext, position: Position, absOffset: number): ts.CompletionInfo {
     let entries: ts.CompletionEntry[] = [];
     // 1. 计算光标在 context.text 中的索引
     // 注意：TemplateContext 处理了换行，我们需要将 LineAndCharacter 转为 character offset
@@ -93,7 +93,7 @@ export class BobeTemplateService {
 
     // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
     const { templates } = this.getVirtualResult(vFileName);
-    const map = calcAbsSourceMap(cursorOffset, templates);
+    const map = calcAbsSourceMap(absOffset, templates);
 
     if (map === undefined) {
       return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries: [] };
@@ -114,7 +114,7 @@ export class BobeTemplateService {
     };
   }
 
-  getQuickInfoAtPosition(context: BobeContext, position: Position): ts.QuickInfo | undefined {
+  getQuickInfoAtPosition(context: BobeContext, position: Position, absOffset: number): ts.QuickInfo | undefined {
     const lines = context.text.split(/\n/);
     const currentLine = lines[position.line];
     const vFileName = getVirtualName(context.fileName);
@@ -124,7 +124,7 @@ export class BobeTemplateService {
 
     // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
     const { templates, code } = this.getVirtualResult(vFileName);
-    const map = calcAbsSourceMap(cursorOffset, templates);
+    const map = calcAbsSourceMap(absOffset, templates);
     if (map === undefined) {
       return undefined;
     }
@@ -137,7 +137,7 @@ export class BobeTemplateService {
       textSpan: newSpan
     };
   }
-  getDefinitionAndBoundSpan(context: BobeContext, position: Position): DefinitionInfoAndBoundSpan | undefined {
+  getDefinitionAndBoundSpan(context: BobeContext, position: Position, absOffset: number): DefinitionInfoAndBoundSpan | undefined {
     const lines = context.text.split(/\n/);
     const currentLine = lines[position.line];
     const vFileName = getVirtualName(context.fileName);
@@ -147,7 +147,7 @@ export class BobeTemplateService {
 
     // 从 sourceMap 找到光标所在表达式，映射到虚拟文档的绝对 offset
     const { templates, sf, code } = this.getVirtualResult(vFileName);
-    const map = calcAbsSourceMap(cursorOffset, templates);
+    const map = calcAbsSourceMap(absOffset, templates);
     if (map === undefined) {
       return undefined;
     }
@@ -174,7 +174,7 @@ export class BobeTemplateService {
           }
           // 在 head 中找不到的映射，可能映射到了 for 的 item i 表达式，将它们转为模板中的偏移
           else {
-            const forMap = calcAbsSourceMap(textSpan.start, templates, true, true);
+            const forMap = calcAbsSourceMap(textSpan.start, templates, true);
             if (forMap) {
               definitions.push({
                 fileName: getRealName(fileName),
@@ -304,7 +304,7 @@ export class BobeTemplateService {
     });
   }
 
-  // getCompletionEntryDetails(context: TemplateContext, position: Position, name: string) {
+  // getCompletionEntryDetails(context: TemplateContext, position: Position, absOffset: number, name: string) {
   //   // 根据 name 返回不同的文档描述
   //   const documentation = this.getDocByName(name);
 
