@@ -1,6 +1,7 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { log } from './global';
 import {
+  AND,
   calcAbsSourceMap,
   calcHeadSourceMap,
   createMemo,
@@ -8,14 +9,17 @@ import {
   fixTextSpan,
   getClassMemberNames,
   getRealName,
+  getSharedItems,
   getVirtualName,
   inInsBrace,
+  inVirtualPart,
+  isClassProp,
   isOverlap,
   isVirtualFile
 } from './util';
 import { sharedEntries, htmlData } from './data/webCustomData';
 import { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
-import { Position, VirtualDocumentResult } from './type';
+import { Position, SourceMapEntry, VirtualDocumentResult } from './type';
 import { matchIdStart2 } from 'bobe-shared';
 
 /** BobeTemplateService 方法接收的最小 context 对象 */
@@ -28,7 +32,6 @@ export interface BobeContext {
 
 const memoTag = createMemo();
 const memoProp = createMemo();
-const memoComponentProp = createMemo();
 const WHOLE_TEXT = /^\w+$/;
 const QUOTE = /'|"/g;
 const TAG_TEXT = /(?!(for|if|else))^\w+/;
@@ -79,7 +82,7 @@ export class BobeTemplateService {
       const tagName = prefix.match(TAG_TEXT)?.[0];
       if (quoteList.length % 2 === 0 && keyMatch && tagName) {
         const propPrefix = keyMatch[1];
-        entries = this.getEntriesByTagPropPrefix(tagName + '.' + propPrefix);
+        entries = this.getEntriesByTagPropPrefix(tagName + AND + propPrefix);
 
         return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
       }
@@ -137,7 +140,11 @@ export class BobeTemplateService {
       textSpan: newSpan
     };
   }
-  getDefinitionAndBoundSpan(context: BobeContext, position: Position, absOffset: number): DefinitionInfoAndBoundSpan | undefined {
+  getDefinitionAndBoundSpan(
+    context: BobeContext,
+    position: Position,
+    absOffset: number
+  ): DefinitionInfoAndBoundSpan | undefined {
     const lines = context.text.split(/\n/);
     const currentLine = lines[position.line];
     const vFileName = getVirtualName(context.fileName);
@@ -157,14 +164,14 @@ export class BobeTemplateService {
     const definitions: ts.DefinitionInfo[] = [];
     for (const item of defineInfo.definitions) {
       let { fileName, textSpan, ...def } = item;
-      let inVirtualPart = false;
+      let _inVirtualPart = false;
       // 默认任务虚拟文档就是当前文档对应的那个虚拟文档
       if (isVirtualFile(fileName)) {
         /*----------------- 在虚拟部分 -----------------*/
-        if ((inVirtualPart = textSpan.start > sf!.getFullWidth())) {
+        if ((_inVirtualPart = inVirtualPart(sf!, textSpan))) {
           const map = calcHeadSourceMap(textSpan.start, templates);
           if (map) {
-            const { definitions: subDefs } = this._ls.getDefinitionAndBoundSpan(vFileName, map.virtualOffset) || {};
+            const { definitions: subDefs } = this._ls.getDefinitionAndBoundSpan(vFileName, map.virtualStart) || {};
             subDefs?.forEach(subDef => {
               definitions.push({
                 ...subDef,
@@ -190,7 +197,7 @@ export class BobeTemplateService {
         fileName = getRealName(fileName);
       }
 
-      if (!inVirtualPart) {
+      if (!_inVirtualPart) {
         const defInfo = {
           fileName,
           textSpan,
@@ -206,6 +213,66 @@ export class BobeTemplateService {
     };
   }
 
+  findReferences(fileName: string, position: number) {
+    /*----------------- 有 bobe 模板语法的文件 -----------------*/
+    const vFileName = getVirtualName(fileName);
+    const { templates, sf, code } = this.getVirtualResult(vFileName);
+    const refs = this._ls.findReferences(vFileName, position);
+    const newResult = refs?.map(({ definition, references }) => {
+      // 是虚拟文件中的 定义
+      if (isVirtualFile(definition.fileName)) definition.fileName = fileName;
+      const newRefs: ts.ReferencedSymbolEntry[] = [];
+
+      references.forEach(ref => {
+        // 是虚拟文件中的引用
+        if (isVirtualFile(ref.fileName)) {
+          ref.fileName = fileName;
+          // 是生成的 IIFE 块中的引用
+          if (inVirtualPart(sf!, ref.textSpan)) {
+            // 1. head 中，因为解构的原因需要 二次查询 map 位置的引用
+            const map = calcHeadSourceMap(ref.textSpan.start, templates);
+            if (map) {
+              const halfLen = (map.length >> 1);
+              const found = this._ls.findReferences(vFileName, map.virtualStart+halfLen+1);
+              found?.forEach(({ references }) => {
+                references.forEach(subRef => {
+                  const subTmplMap = calcAbsSourceMap(subRef.textSpan.start, templates, true);
+                  if (subTmplMap) {
+                    subRef.textSpan = fixTextSpan(subRef.textSpan, code, subTmplMap);
+                    // 把所有 引用都映射到模板字符串中
+                    subRef.fileName = fileName;
+                    newRefs.push(subRef);
+                  }
+                });
+              });
+              // subRef 将代替原引用，所以原引用不应该被加入 newRefs
+              return;
+            }
+            // 2. sourceMap 中 修正 span 即可
+            else {
+              const tmplMap = calcAbsSourceMap(ref.textSpan.start, templates, true);
+              if (tmplMap) {
+                const newSpan = fixTextSpan(ref.textSpan, code, tmplMap);
+                ref.textSpan = newSpan;
+              }
+            }
+          }
+          newRefs.push(ref);
+        }
+        // 不是虚拟文件中的引用
+        else {
+          newRefs.push(ref);
+        }
+      });
+      return {
+        definition,
+        references: newRefs
+      };
+    });
+    return newResult;
+  }
+
+  // TODO: findRenameLocations
   getEntriesByTagPrefix = memoTag((prefix: string) => {
     const filteredHTMLEntries = htmlData.tags
       .filter(tag => tag.name.startsWith(prefix))
@@ -221,7 +288,7 @@ export class BobeTemplateService {
   });
 
   getEntriesByTagPropPrefix = memoProp((tagDotProp: string) => {
-    const [targetTag, propPrefix] = tagDotProp.split('.');
+    const [targetTag, propPrefix] = tagDotProp.split(AND);
 
     const item = htmlData.tags.find(tag => tag.name === targetTag);
     const propEntries =
@@ -257,25 +324,52 @@ export class BobeTemplateService {
       return [];
     }
     const result: ts.Diagnostic[] = [];
-    for (const diag of rawDiags) {
-      if (diag.start === undefined) continue;
-
-      // 反向映射：虚拟文档绝对 offset → 模板内相对 offset（0-based）
-      // decorator 会自动加上 context.node.getStart() + 1，所以这里只返回相对值
-      let templateRelativeOffset: number | undefined;
-      let mappedLength = diag.length ?? 1;
-
-      for (const entry of tmpl.sourceMap) {
+    rawDiags.sort((a, b) => a.start! - b.start!);
+    const gen = getSharedItems(
+      rawDiags,
+      tmpl.sourceMap,
+      (diag, entry) => {
+        if (diag.start === undefined) return false;
         const entryVirtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
-        const entryVirtualEnd = entryVirtualStart + entry.length;
-        if (isOverlap(entryVirtualStart, entryVirtualEnd, diag.start, diag.start + mappedLength)) {
-          templateRelativeOffset = entry.originOffset;
-          mappedLength = Math.min(mappedLength, entry.length - (diag.start - entryVirtualStart));
-          result.push({ ...diag, start: entry.originOffset, length: entry.length });
-          break;
-        }
+        return isOverlap(
+          entryVirtualStart,
+          entryVirtualStart + entry.length,
+          diag.start,
+          diag.start + (diag.length ?? 1)
+        );
+      },
+      (diag, entry) => {
+        // diag 较小会跳过
+        if (diag.start === undefined) return false;
+        return diag.start > tmpl.iifeStartInVirtual! + entry.codeOffset;
       }
+    );
+    let iterRes = gen.next();
+    while (!iterRes.done) {
+      const [diag, entry] = iterRes.value;
+      result.push({ ...diag, start: entry.originOffset, length: entry.length });
+      iterRes = gen.next();
     }
+
+    // for (const diag of rawDiags) {
+    //   if (diag.start === undefined) continue;
+
+    //   // 反向映射：虚拟文档绝对 offset → 模板内相对 offset（0-based）
+    //   // decorator 会自动加上 context.node.getStart() + 1，所以这里只返回相对值
+    //   let templateRelativeOffset: number | undefined;
+    //   let mappedLength = diag.length ?? 1;
+
+    //   for (const entry of tmpl.sourceMap) {
+    //     const entryVirtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
+    //     const entryVirtualEnd = entryVirtualStart + entry.length;
+    //     if (isOverlap(entryVirtualStart, entryVirtualEnd, diag.start, diag.start + mappedLength)) {
+    //       templateRelativeOffset = entry.originOffset;
+    //       mappedLength = Math.min(mappedLength, entry.length - (diag.start - entryVirtualStart));
+    //       result.push({ ...diag, start: entry.originOffset, length: entry.length });
+    //       break;
+    //     }
+    //   }
+    // }
 
     log('getSemanticDiagnostics 映射结果', result.length);
     return result;

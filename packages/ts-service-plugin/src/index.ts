@@ -1,7 +1,22 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { BobeTemplateService } from './template-service';
 import { G } from './global';
-import { getVirtualName, isVirtualFile, getRealName, getPosTemplateCtx, getValidBobeTemplateNode, makeContext } from './util';
+import {
+  getVirtualName,
+  isVirtualFile,
+  getRealName,
+  getPosTemplateCtx,
+  getValidBobeTemplateNode,
+  makeContext,
+  getSourceFileAndNode,
+  isClassProp,
+  sfHasBobeTemplate,
+  createMemo,
+  AND,
+  calcAbsSourceMap,
+  fixTextSpan,
+  inVirtualPart
+} from './util';
 import { buildVirtualDocument } from './buildVirtualDocument';
 import { VirtualDocumentResult } from './type';
 
@@ -14,7 +29,6 @@ export default (modules: { typescript: typeof ts }) => {
 
       const lsh = info.languageServiceHost;
       const tss = modules.typescript;
-
       // 缓存每个虚拟文件最近一次的构建结果（含 sourceMap）
       const virtualDocCache = new Map<string, { result: VirtualDocumentResult; version: string }>();
 
@@ -25,7 +39,7 @@ export default (modules: { typescript: typeof ts }) => {
         if (cached && cached.version === version) return cached.result;
         const sourceFile = info.languageService.getProgram()?.getSourceFile(realFileName);
         if (!sourceFile) {
-          return { code: '', templates: [],  sf: sourceFile };
+          return { code: '', templates: [], sf: sourceFile };
         }
         const result = buildVirtualDocument(sourceFile, tss);
         virtualDocCache.set(virtualFileName, { result, version });
@@ -41,9 +55,17 @@ export default (modules: { typescript: typeof ts }) => {
         getScriptFileNames: () => {
           const fileNames = lsh.getScriptFileNames();
           const virtualFileNames = fileNames
-            .filter(it => !it.match(/node_modules/) && !isVirtualFile(it))
+            .filter(it => {
+              if (it.match(/node_modules/) || isVirtualFile(it)) {
+                return false;
+              }
+              const snapshot = lsh.getScriptSnapshot(it);
+              if (!snapshot) return false;
+              const content = snapshot.getText(0, snapshot.getLength());
+              return content.includes('bobe`');
+            })
             .map(getVirtualName);
-          logger.info(`正在处理文件: ${JSON.stringify(virtualFileNames, undefined, 2)}`);
+          logger.info(`被加入的虚拟文件: ${JSON.stringify(virtualFileNames, undefined, 2)}`);
           return [...new Set([...fileNames, ...virtualFileNames])];
         },
 
@@ -123,6 +145,55 @@ export default (modules: { typescript: typeof ts }) => {
             };
           }
 
+          if (prop === 'findReferences') {
+            return (fileName: string, position: number) => {
+              /*----------------- 虚拟文档不需要记录 -----------------*/
+              if (isVirtualFile(fileName)) {
+                return undefined;
+              }
+              const snapshot = lsh.getScriptSnapshot(fileName);
+              if (!snapshot) return target.findReferences(fileName, position);
+              const content = snapshot.getText(0, snapshot.getLength());
+              const hasBobeTemplate = content.includes('bobe`');
+
+              /*----------------- 无 bobe 模板语法的文件 -----------------*/
+              if (!hasBobeTemplate) {
+                const refSymbols = target.findReferences(fileName, position);
+                const newRefSymbols = refSymbols?.map(it => {
+                  const newRefs: ts.ReferenceEntry[] = [];
+                  it.references.forEach(({ fileName, textSpan, ...ref }) => {
+                    if (isVirtualFile(fileName)) {
+                      const realName = getRealName(fileName);
+                      const { code, sf: realSf, templates } = getVirtualResult(fileName);
+                      if (!realSf) return;
+                      // 1. 虚拟文件中非 IIFE 不分的引用不记录，否则引用会重复
+                      if (!inVirtualPart(realSf, textSpan)) return;
+
+                      // 2. 在 IIFE 中，修正到原文件位置
+                      const map = calcAbsSourceMap(textSpan.start, templates, true);
+                      if (!map) return;
+                      // 找到映射关系就修正
+                      textSpan = fixTextSpan(textSpan, code, map);
+                      fileName = realName;
+                    }
+                    // 真实文件的引用不需要修正
+                    newRefs.push({
+                      ...ref,
+                      fileName,
+                      textSpan
+                    });
+                  });
+                  return {
+                    ...it,
+                    references: newRefs
+                  };
+                });
+                return newRefSymbols;
+              }
+              return templateService.findReferences(fileName, position);
+            };
+          }
+
           if (prop === 'getSemanticDiagnostics') {
             return (fileName: string) => {
               const baseDiags = target.getSemanticDiagnostics(fileName);
@@ -176,4 +247,3 @@ export default (modules: { typescript: typeof ts }) => {
     }
   };
 };
-

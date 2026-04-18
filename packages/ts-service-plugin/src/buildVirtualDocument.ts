@@ -3,7 +3,7 @@ import { Bobe2ts, BOBE_DOM_PROP_TRANSFER, BOBE_PREFIX, IdGenerator } from './bob
 import { log } from './global';
 import { findPrecedingClassName, getClassMemberNames, isBobeTaggedTemplate } from './util';
 import { ParseError } from 'bobe';
-import { BobeTemplateInfo, SourceMapEntry, VirtualDocumentResult } from './type';
+import { BobeTemplateInfo, HeadMap, SourceMapEntry, VirtualDocumentResult } from './type';
 
 type TemplatePreInfo = {
   raw: string;
@@ -71,7 +71,7 @@ export function buildVirtualDocument(sourceFile: ts.SourceFile, tss: typeof ts):
   const templates: VirtualDocumentResult['templates'] = [];
   let iifeIdx = 0;
   for (const info of templateInfos) {
-    if(info.iifeCodeIndex! > iifeIdx) {
+    if (info.iifeCodeIndex! > iifeIdx) {
       virtualCode += iifes[iifeIdx] + '\n';
       iifeIdx++;
     }
@@ -92,33 +92,36 @@ export function buildVirtualDocument(sourceFile: ts.SourceFile, tss: typeof ts):
 
 function buildIife(
   templatePreInfos: TemplatePreInfo[],
-  className: string | undefined,
+  className: string,
   sourceFile: ts.SourceFile,
   tss: typeof ts
 ): {
   iifeCode: string;
-  headMap: SourceMapEntry[];
+  headMap: HeadMap;
   sourceMapsAndErrors: { sourceMap: SourceMapEntry[]; errors: ParseError[] }[];
 } {
   let header = '(() => {\n';
-  const headMap: SourceMapEntry[] = [];
-  if (className) {
-    const members = getClassMemberNames(className, sourceFile, tss);
-    if (members.length > 0) {
-      header += `const {`;
+  const headMap: HeadMap = [];
+  headMap.className = className;
+  const members = getClassMemberNames(className, sourceFile, tss);
+  if (members.length > 0) {
+    header += `const {`;
 
-      for (const mem of members) {
-        const nameText = mem.name!.getText();
-        headMap.push({
-          originOffset: mem.name!.pos,
-          codeOffset: header.length,
-          length: nameText.length
-        });
-        header += nameText + ',';
-      }
-      header += `} = {} as any as ${className};\n`;
+    for (const mem of members) {
+      const nameText = mem.name!.getText();
+      const aliasText = `${nameText}:${nameText}`
+      headMap.push({
+        originOffset: mem.name!.pos,
+        codeOffset: header.length,
+        length: aliasText.length
+      });
+      header += aliasText + ',';
     }
+    header += `} = {} as any as ${className};\n`;
   }
+  const lastItem = headMap[headMap.length - 1];
+  const end = lastItem ? lastItem.codeOffset + lastItem.length : 0;
+  headMap.range = [headMap[0].codeOffset || 0, end];
   const idGenerator = new IdGenerator();
   header += `let ${idGenerator.h}!:<K extends keyof HTMLElementTagNameMap>(
   tag: K, 

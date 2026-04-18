@@ -14,7 +14,7 @@ export type BobeTemplateInfo = {
   /** 该模板字符串在原始源文件中的起始 offset（反引号后第一个字符） */
   templateStartInSource: number;
   sourceMap: SourceMapEntry[];
-  headMap: SourceMapEntry[];
+  headMap: HeadMap;
   /** 该模板对应的 IIFE 块在虚拟文档中的起始 offset */
   iifeStartInVirtual?: number;
   iifeCodeIndex?: number;
@@ -38,4 +38,10 @@ export interface SourceMapEntry {
   codeOffset: number;
   /** 表达式的字符长度 */
   length: number;
+}
+
+export type HeadMap = SourceMapEntry[] & {
+  className?: string;
+  /** 结构表达式相对 IIFE 的范围 */
+  range?: [number, number];
 }

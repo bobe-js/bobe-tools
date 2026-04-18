@@ -1,11 +1,24 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { Virtual_File_Exp, Virtual_File_Suffix } from './global';
-import { AbsMap, BobeTemplateInfo, SourceMapEntry } from './type';
+import { AbsMap, BobeTemplateInfo, HeadMap, SourceMapEntry } from './type';
 import { jsVarRegexp, matchId, matchIdStart2 } from 'bobe-shared';
 import { SourceLocation } from 'bobe';
 
 export function isBobeTaggedTemplate(node: ts.TaggedTemplateExpression, tss: typeof ts): boolean {
   return tss.isIdentifier(node.tag) && node.tag.text === 'bobe';
+}
+
+export function sfHasBobeTemplate(sf: ts.SourceFile, tss: typeof ts) {
+  let hasBobe = false;
+  function visit(node: ts.Node) {
+    if (tss.isTaggedTemplateExpression(node) && isBobeTaggedTemplate(node, tss) && !hasBobe) {
+      hasBobe = true;
+    } else {
+      tss.forEachChild(node, visit);
+    }
+  }
+  visit(sf);
+  return hasBobe;
 }
 
 export class LRUCache<K = string, V = any> {
@@ -159,7 +172,7 @@ export function getClassMemberNames(className: string, sourceFile: ts.SourceFile
   function visit(node: ts.Node) {
     if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name?.text === className) {
       for (const member of node.members) {
-        if ((tss.isPropertyDeclaration(member) || tss.isMethodDeclaration(member)) && tss.isIdentifier(member.name)) {
+        if (isClassProp(member, tss)) {
           names.push(member);
         }
       }
@@ -171,18 +184,17 @@ export function getClassMemberNames(className: string, sourceFile: ts.SourceFile
   return names;
 }
 
-export function calcAbsSourceMap(
-  cursorOffset: number,
-  templates: BobeTemplateInfo[],
-  isVirtualCursor = false
-) {
+export function calcAbsSourceMap(cursorOffset: number, templates: BobeTemplateInfo[], isVirtualCursor = false) {
   let virtualStart: number | undefined;
   let originStart: number, length: number;
   const compareKey = isVirtualCursor ? 'codeOffset' : 'originOffset';
   const baseKey = isVirtualCursor ? 'iifeStartInVirtual' : 'templateStartInSource';
-  for (const tmpl of templates) {
+  for (let i = templates.length; i--; ) {
+    const tmpl = templates[i];
+    // 比当前 tmpl 起始位置小，不属于这个模板
+    if (cursorOffset < tmpl[baseKey]!) continue;
     for (const entry of tmpl.sourceMap) {
-      const eStart = tmpl[baseKey]!+entry[compareKey]
+      const eStart = tmpl[baseKey]! + entry[compareKey];
       const eEnd = eStart + entry.length;
       if (cursorOffset >= eStart && cursorOffset <= eEnd) {
         virtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
@@ -205,8 +217,9 @@ export function calcHeadSourceMap(absCursorOffset: number, templates: BobeTempla
   let virtualStart: number | undefined;
   let originStart: number, length: number;
   for (const tmpl of templates) {
+    if (!inVirtualHead(tmpl.headMap, { start: absCursorOffset } as any, tmpl)) continue;
+    const cursorOffset = absCursorOffset - tmpl.iifeStartInVirtual!;
     for (const entry of tmpl.headMap) {
-      const cursorOffset = absCursorOffset - tmpl.iifeStartInVirtual!;
       if (cursorOffset >= entry.codeOffset && cursorOffset <= entry.codeOffset + entry.length) {
         virtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
         originStart = entry.originOffset;
@@ -259,8 +272,21 @@ export function getPosTemplateCtx(
   if (!templateNode || position <= templateNode.pos) return null;
   const baseOffset = templateNode.getStart() + 1;
   const ctx = makeContext(templateNode, sf, fileName, baseOffset);
-  const relPos = getRelativePosition(info, baseOffset, fileName, position);// 这里找到了相对第二个模板的开始位置
+  const relPos = getRelativePosition(info, baseOffset, fileName, position); // 这里找到了相对第二个模板的开始位置
   return { ctx, relPos: relPos as SourceLocation['start'] };
+}
+
+export function getSourceFileAndNode(
+  info: ts.server.PluginCreateInfo,
+  tss: typeof ts,
+  fileName: string,
+  position: number
+) {
+  const sf = info.languageService.getProgram()?.getSourceFile(fileName);
+  if (!sf) return null;
+  const node = findNodeAtPosition(tss, sf, position);
+  if (!node) return null;
+  return { sf, node };
 }
 
 // 判断节点是否属于 bobe 标签模板，返回模板字面量节点
@@ -321,3 +347,45 @@ export function findNodeAtPosition(tss: typeof ts, sf: ts.SourceFile, position: 
 }
 
 export const domPropertyExp = /^[a-zA-Z][\w-]*$/;
+
+export const AND = `__BOBE_AND_${Date.now().toString(36)}__`;
+
+export function isClassProp(node: ts.Node, tss: typeof ts) {
+  return tss.isPropertyDeclaration(node) || (tss.isMethodDeclaration(node) && tss.isIdentifier(node.name));
+}
+
+export function* getSharedItems<A, B>(
+  arr1: A[],
+  arr2: B[],
+  isEqual: (a: A, b: B) => boolean,
+  isBigger: (a: A, b: B) => boolean
+) {
+  const it1 = arr1[Symbol.iterator]();
+  const it2 = arr2[Symbol.iterator]();
+
+  let res1 = it1.next();
+  let res2 = it2.next();
+
+  while (!res1.done && !res2.done) {
+    const v1 = res1.value;
+    const v2 = res2.value;
+
+    // 始终保持 v1 在前，v2 在后
+    if (isEqual(v1, v2)) {
+      yield [v1, v2] as const; // 或者根据需求 yield { v1, v2 }
+      res1 = it1.next();
+      res2 = it2.next();
+    } else if (isBigger(v1, v2)) {
+      // v1 > v2: 因为是递增数组，说明 v2 太小了，需要移动 arr2 的指针
+      res2 = it2.next();
+    } else {
+      // v1 < v2: 说明 v1 太小了，移动 arr1 的指针
+      res1 = it1.next();
+    }
+  }
+}
+
+export const inVirtualPart = (sf: ts.SourceFile, textSpan: ts.TextSpan) => textSpan.start > sf.getFullWidth();
+export const inVirtualHead = (headMap: HeadMap, textSpan: ts.TextSpan, tmpl: BobeTemplateInfo) =>
+  tmpl.iifeStartInVirtual! + headMap.range![0] <= textSpan.start &&
+  textSpan.start < tmpl.iifeStartInVirtual! + headMap.range![1];
