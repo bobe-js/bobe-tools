@@ -193,6 +193,65 @@ export default (modules: { typescript: typeof ts }) => {
               return templateService.findReferences(fileName, position);
             };
           }
+          if (prop === 'findRenameLocations') {
+            return (
+              fileName: string,
+              position: number,
+              findInStrings: boolean,
+              findInComments: boolean,
+              preferences: ts.UserPreferences
+            ) => {
+              /*----------------- 虚拟文档不需要记录 -----------------*/
+              if (isVirtualFile(fileName)) {
+                return undefined;
+              }
+              const snapshot = lsh.getScriptSnapshot(fileName);
+              if (!snapshot)
+                return target.findRenameLocations(fileName, position, findInStrings, findInComments, preferences);
+              const content = snapshot.getText(0, snapshot.getLength());
+              const hasBobeTemplate = content.includes('bobe`');
+
+              /*----------------- 无 bobe 模板语法的文件 -----------------*/
+              if (!hasBobeTemplate) {
+                const renameLocations = target.findRenameLocations(
+                  fileName,
+                  position,
+                  findInStrings,
+                  findInComments,
+                  preferences
+                );
+                const newRenameLocations: ts.RenameLocation[] = [];
+                renameLocations?.forEach(({ fileName, textSpan, ...location }) => {
+                  if (isVirtualFile(fileName)) {
+                    const realName = getRealName(fileName);
+                    const { code, sf: realSf, templates } = getVirtualResult(fileName);
+                    if (!realSf) return;
+                    // 1. 虚拟文件中非 IIFE 不分的引用不记录，否则引用会重复
+                    if (!inVirtualPart(realSf, textSpan)) return;
+                    // 2. 在 IIFE 中，修正到原文件位置
+                    const map = calcAbsSourceMap(textSpan.start, templates, true);
+                    if (!map) return;
+                    // 找到映射关系就修正
+                    fileName = realName;
+                    textSpan = fixTextSpan(textSpan, code, map);
+                  }
+                  newRenameLocations.push({
+                    ...location,
+                    fileName,
+                    textSpan
+                  });
+                });
+                return newRenameLocations;
+              }
+              return templateService.findRenameLocations(
+                fileName,
+                position,
+                findInStrings,
+                findInComments,
+                preferences
+              );
+            };
+          }
 
           if (prop === 'getSemanticDiagnostics') {
             return (fileName: string) => {

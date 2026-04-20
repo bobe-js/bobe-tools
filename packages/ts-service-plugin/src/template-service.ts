@@ -232,8 +232,8 @@ export class BobeTemplateService {
             // 1. head 中，因为解构的原因需要 二次查询 map 位置的引用
             const map = calcHeadSourceMap(ref.textSpan.start, templates);
             if (map) {
-              const halfLen = (map.length >> 1);
-              const found = this._ls.findReferences(vFileName, map.virtualStart+halfLen+1);
+              const halfLen = map.length >> 1;
+              const found = this._ls.findReferences(vFileName, map.virtualStart + halfLen + 1);
               found?.forEach(({ references }) => {
                 references.forEach(subRef => {
                   const subTmplMap = calcAbsSourceMap(subRef.textSpan.start, templates, true);
@@ -270,6 +270,62 @@ export class BobeTemplateService {
       };
     });
     return newResult;
+  }
+  findRenameLocations(
+    rawFileName: string,
+    position: number,
+    findInStrings: boolean,
+    findInComments: boolean,
+    preferences: ts.UserPreferences
+  ) {
+    /*----------------- 有 bobe 模板语法的文件 -----------------*/
+    const vFileName = getVirtualName(rawFileName);
+    const { templates, sf, code } = this.getVirtualResult(vFileName);
+    const locations = this._ls.findRenameLocations(vFileName, position, findInStrings, findInComments, preferences);
+    const newLocations: ts.RenameLocation[] = [];
+
+    locations?.forEach(({ fileName, textSpan, ...location }) => {
+      // 是虚拟文件中的引用
+      if (isVirtualFile(fileName)) {
+        fileName = rawFileName;
+        // 是生成的 IIFE 块中的引用
+        if (inVirtualPart(sf!, textSpan)) {
+          // 1. head 中，因为解构的原因需要 二次查询 map 位置的引用
+          const map = calcHeadSourceMap(textSpan.start, templates);
+          if (map) {
+            const halfLen = map.length >> 1;
+            const found = this._ls.findRenameLocations(
+              vFileName,
+              map.virtualStart + halfLen + 1,
+              findInStrings,
+              findInComments,
+              preferences
+            );
+            found?.forEach(subLocation => {
+              const subTmplMap = calcAbsSourceMap(subLocation.textSpan.start, templates, true);
+              if (subTmplMap) {
+                subLocation.textSpan = fixTextSpan(subLocation.textSpan, code, subTmplMap);
+                // 把所有 引用都映射到模板字符串中
+                subLocation.fileName = rawFileName;
+                newLocations.push(subLocation);
+              }
+            });
+            // subRef 将代替原引用，所以原引用不应该被加入 newRefs
+            return;
+          }
+          // 2. sourceMap 中 修正 span 即可
+          else {
+            const tmplMap = calcAbsSourceMap(textSpan.start, templates, true);
+            if (tmplMap) {
+              const newSpan = fixTextSpan(textSpan, code, tmplMap);
+              textSpan = newSpan;
+            }
+          }
+        }
+      }
+      newLocations.push({ ...location, fileName, textSpan });
+    });
+    return newLocations;
   }
 
   // TODO: findRenameLocations
