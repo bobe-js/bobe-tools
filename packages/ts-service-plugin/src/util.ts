@@ -1,25 +1,8 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { Virtual_File_Exp, Virtual_File_Suffix } from './global';
-import { AbsMap, BobeTemplateInfo, HeadMap, SourceMapEntry } from './type';
+import { AbsMap, BobeTemplateInfo, HeadMap, IClassNode, SourceMapEntry } from './type';
 import { jsVarRegexp, matchId, matchIdStart2 } from 'bobe-shared';
 import { SourceLocation } from 'bobe';
-
-export function isBobeTaggedTemplate(node: ts.TaggedTemplateExpression, tss: typeof ts): boolean {
-  return tss.isIdentifier(node.tag) && node.tag.text === 'bobe';
-}
-
-export function sfHasBobeTemplate(sf: ts.SourceFile, tss: typeof ts) {
-  let hasBobe = false;
-  function visit(node: ts.Node) {
-    if (tss.isTaggedTemplateExpression(node) && isBobeTaggedTemplate(node, tss) && !hasBobe) {
-      hasBobe = true;
-    } else {
-      tss.forEachChild(node, visit);
-    }
-  }
-  visit(sf);
-  return hasBobe;
-}
 
 export class LRUCache<K = string, V = any> {
   private maxSize: number;
@@ -149,25 +132,70 @@ export function inInsBrace(content: string, targetIndex: number): boolean {
   return false;
 }
 
+export function isBobeIdentifier(node: ts.TaggedTemplateExpression, tss: typeof ts): boolean {
+  return tss.isIdentifier(node.tag) && node.tag.text === 'bobe';
+}
+
+export function isBobeTemplate(node: ts.Node, tss: typeof ts): node is ts.TaggedTemplateExpression {
+  return tss.isTaggedTemplateExpression(node) && isBobeIdentifier(node, tss);
+}
+
+export function sfHasBobeTemplate(sf: ts.SourceFile, tss: typeof ts) {
+  let hasBobe = false;
+  function visit(node: ts.Node) {
+    if (isBobeTemplate(node, tss) && !hasBobe) {
+      hasBobe = true;
+    } else {
+      tss.forEachChild(node, visit);
+    }
+  }
+  visit(sf);
+  return hasBobe;
+}
+
 /** 获取当前节点最近的类名 */
-export function findPrecedingClassName(
+export function findPrecedingClassNode(
   targetNode: ts.Node,
   sourceFile: ts.SourceFile,
   tss: typeof ts
-): string | undefined {
-  let result: string | undefined;
+): IClassNode | undefined {
+  let result: IClassNode | undefined;
   function visit(node: ts.Node) {
     if (node.pos >= targetNode.pos) return;
     if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name) {
-      result = node.name.text;
+      result = node;
     }
     tss.forEachChild(node, visit);
   }
   visit(sourceFile);
   return result;
 }
+
+export function findPrecedingBobeTemplate(targetNode: ts.Node, classNode: IClassNode, tss: typeof ts) {
+  let result: ts.TaggedTemplateExpression | undefined;
+  function visit(node: ts.Node) {
+    if (node.pos >= targetNode.pos) return;
+    if (isBobeTemplate(node, tss)) {
+      result = node;
+    }
+    tss.forEachChild(node, visit);
+  }
+  visit(classNode);
+  return result;
+}
+
+export function getClassMembersInClass(classNode: IClassNode, tss: typeof ts) {
+  const names: ts.ClassElement[] = [];
+  for (const member of classNode.members) {
+    if (isClassProp(member, tss)) {
+      names.push(member);
+    }
+  }
+  return names;
+}
+
 /** 根据类名获取成员名称列表 */
-export function getClassMemberNames(className: string, sourceFile: ts.SourceFile, tss: typeof ts): ts.ClassElement[] {
+export function getClassMemberNames(className: string, rangeNode: ts.Node, tss: typeof ts): ts.ClassElement[] {
   const names: ts.ClassElement[] = [];
   function visit(node: ts.Node) {
     if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name?.text === className) {
@@ -180,7 +208,7 @@ export function getClassMemberNames(className: string, sourceFile: ts.SourceFile
     }
     tss.forEachChild(node, visit);
   }
-  visit(sourceFile);
+  visit(rangeNode);
   return names;
 }
 
@@ -294,13 +322,11 @@ export function getValidBobeTemplateNode(tss: typeof ts, node: ts.Node): ts.Temp
   switch (node.kind) {
     case tss.SyntaxKind.TaggedTemplateExpression: {
       const t = node as ts.TaggedTemplateExpression;
-      return isBobeTaggedTemplate(t, tss) ? t.template : undefined;
+      return isBobeIdentifier(t, tss) ? t.template : undefined;
     }
     case tss.SyntaxKind.NoSubstitutionTemplateLiteral: {
       const p = node.parent;
-      return p && tss.isTaggedTemplateExpression(p) && isBobeTaggedTemplate(p, tss)
-        ? (node as ts.NoSubstitutionTemplateLiteral)
-        : undefined;
+      return p && isBobeTemplate(p, tss) ? (node as ts.NoSubstitutionTemplateLiteral) : undefined;
     }
     case tss.SyntaxKind.TemplateHead:
       return node.parent?.parent ? getValidBobeTemplateNode(tss, node.parent.parent) : undefined;

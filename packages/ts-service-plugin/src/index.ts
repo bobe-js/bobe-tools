@@ -37,11 +37,12 @@ export default (modules: { typescript: typeof ts }) => {
         const realFileName = getRealName(virtualFileName);
         const version = lsh.getScriptVersion(realFileName);
         if (cached && cached.version === version) return cached.result;
-        const sourceFile = info.languageService.getProgram()?.getSourceFile(realFileName);
+        const program = info.languageService.getProgram();
+        const sourceFile = program?.getSourceFile(realFileName);
         if (!sourceFile) {
           return { code: '', templates: [], sf: sourceFile };
         }
-        const result = buildVirtualDocument(sourceFile, tss);
+        const result = buildVirtualDocument(sourceFile, tss, program);
         virtualDocCache.set(virtualFileName, { result, version });
         return result;
       };
@@ -109,7 +110,7 @@ export default (modules: { typescript: typeof ts }) => {
 
       const wrappedLangService = tss.createLanguageService(innerHost);
 
-      const templateService = new BobeTemplateService(tss, wrappedLangService, info.project, getVirtualResult);
+      const templateService = new BobeTemplateService(tss, wrappedLangService, info.project, getVirtualResult, info);
 
       // ---- 自己实现 decorator 逻辑，不依赖 typescript-template-language-service-decorator ----
 

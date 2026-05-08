@@ -9,7 +9,7 @@ export interface VirtualDocumentResult {
   templates: BobeTemplateInfo[];
   sf?: ts.SourceFile;
 }
-
+export type IClassNode = ts.ClassDeclaration | ts.ClassExpression;
 export type BobeTemplateInfo = {
   /** 该模板字符串在原始源文件中的起始 offset（反引号后第一个字符） */
   templateStartInSource: number;

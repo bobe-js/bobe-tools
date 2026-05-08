@@ -56,7 +56,7 @@ type ${BOBE_PREFIX}NumericProps = ${BOBE_PREFIX}ToMap<
 >;
 type ${BOBE_PREFIX}NativeProperties = ${BOBE_PREFIX}BooleanProps & ${BOBE_PREFIX}NumericProps;
 type ${BOBE_PREFIX}CreateTextOrComponent = {
-  <T>(input: (...args: any[]) => T): T;
+  <T>(a: {defineProps?: T} & Record<any, any>): T;
   <T extends new (...args: any[]) =>any>(input: T): InstanceType<T>;
   (input: any): Text;
 };

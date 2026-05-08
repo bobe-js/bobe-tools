@@ -5,9 +5,10 @@ import {
   calcAbsSourceMap,
   calcHeadSourceMap,
   createMemo,
-  findPrecedingClassName,
+  findPrecedingBobeTemplate,
+  findPrecedingClassNode,
   fixTextSpan,
-  getClassMemberNames,
+  getClassMembersInClass,
   getRealName,
   getSharedItems,
   getVirtualName,
@@ -41,7 +42,8 @@ export class BobeTemplateService {
     public tss: typeof ts,
     public _ls: ts.LanguageService,
     public project: ts.server.Project,
-    public getVirtualResult: (virtualFileName: string) => VirtualDocumentResult
+    public getVirtualResult: (virtualFileName: string) => VirtualDocumentResult,
+    public info: ts.server.PluginCreateInfo
   ) {}
   // 这里的 position 是相对于模板内部的偏移量（0 是反引号后的第一个字符）
   getCompletionsAtPosition(context: BobeContext, position: Position, absOffset: number): ts.CompletionInfo {
@@ -59,14 +61,31 @@ export class BobeTemplateService {
     if (inInsBrace(currentLine, position.column)) {
       const curr = currentLine[position.column - 1];
       if (!['.', '"', "'"].some(c => c === curr)) {
-        const name = findPrecedingClassName(context.node, context.sf, this.tss);
-        if (name) {
-          const keys = getClassMemberNames(name, context.sf, this.tss);
+        const classNode = findPrecedingClassNode(context.node, context.sf, this.tss);
+        if (classNode) {
+          // TODO: 考虑 default class
+          const keys = getClassMembersInClass(classNode, this.tss);
           entries = keys.map((key, i) => ({
             name: key.name!.getText(),
             kind: this.tss.ScriptElementKind.memberVariableElement,
             sortText: `00000000${i}${key}`
           }));
+
+          const bobeNode = findPrecedingBobeTemplate(context.node, classNode, this.tss);
+          const checker = this.info.languageService.getProgram()?.getTypeChecker();
+          if (bobeNode && checker) {
+            const typeArg = bobeNode.typeArguments?.[0];
+            if (typeArg) {
+              const typeNode = checker.getTypeAtLocation(typeArg);
+              checker.getPropertiesOfType(typeNode).forEach((prop, i) => {
+                entries.push({
+                  name: prop.name,
+                  kind: this.tss.ScriptElementKind.memberVariableElement,
+                  sortText: `000000000${i}${prop}`
+                });
+              });
+            }
+          }
         }
         return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
       }
