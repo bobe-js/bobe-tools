@@ -15,7 +15,8 @@ import {
   AND,
   calcAbsSourceMap,
   fixTextSpan,
-  inVirtualPart
+  inVirtualPart,
+  strHasBobeTemplate
 } from './util';
 import { buildVirtualDocument } from './buildVirtualDocument';
 import { VirtualDocumentResult } from './type';
@@ -155,7 +156,7 @@ export default (modules: { typescript: typeof ts }) => {
               const snapshot = lsh.getScriptSnapshot(fileName);
               if (!snapshot) return target.findReferences(fileName, position);
               const content = snapshot.getText(0, snapshot.getLength());
-              const hasBobeTemplate = content.includes('bobe`');
+              const hasBobeTemplate = strHasBobeTemplate(content);
 
               /*----------------- 无 bobe 模板语法的文件 -----------------*/
               if (!hasBobeTemplate) {
@@ -210,7 +211,7 @@ export default (modules: { typescript: typeof ts }) => {
               if (!snapshot)
                 return target.findRenameLocations(fileName, position, findInStrings, findInComments, preferences);
               const content = snapshot.getText(0, snapshot.getLength());
-              const hasBobeTemplate = content.includes('bobe`');
+              const hasBobeTemplate = strHasBobeTemplate(content);
 
               /*----------------- 无 bobe 模板语法的文件 -----------------*/
               if (!hasBobeTemplate) {
