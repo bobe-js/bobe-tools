@@ -143,7 +143,10 @@ export function isBobeTemplate(node: ts.Node, tss: typeof ts): node is ts.Tagged
 export function sfHasBobeTemplate(sf: ts.SourceFile, tss: typeof ts) {
   let hasBobe = false;
   function visit(node: ts.Node) {
-    if (isBobeTemplate(node, tss) && !hasBobe) {
+    if (hasBobe) {
+      return;
+    }
+    if (isBobeTemplate(node, tss)) {
       hasBobe = true;
     } else {
       tss.forEachChild(node, visit);
@@ -153,16 +156,21 @@ export function sfHasBobeTemplate(sf: ts.SourceFile, tss: typeof ts) {
   return hasBobe;
 }
 
+export const strHasBobeTemplate = (str: string) => str.match(/bobe(?:\\s*(<)([^`]*)(>))?`/);
+
 /** 获取当前节点最近的类名 */
 export function findPrecedingClassNode(
   targetNode: ts.Node,
   sourceFile: ts.SourceFile,
   tss: typeof ts
 ): IClassNode | undefined {
-  let result: IClassNode | undefined;
+  let result: IClassNode | undefined,
+    alreadyCrossTargetNode = false;
   function visit(node: ts.Node) {
-    if (node.pos >= targetNode.pos) return;
-    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name) {
+    if (node.pos >= targetNode.pos || alreadyCrossTargetNode || result) {
+      return (alreadyCrossTargetNode = true);
+    }
+    if (isClass(node, tss) && node.name && contains(node, targetNode)) {
       result = node;
     }
     tss.forEachChild(node, visit);
@@ -198,7 +206,7 @@ export function getClassMembersInClass(classNode: IClassNode, tss: typeof ts) {
 export function getClassMemberNames(className: string, rangeNode: ts.Node, tss: typeof ts): ts.ClassElement[] {
   const names: ts.ClassElement[] = [];
   function visit(node: ts.Node) {
-    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name?.text === className) {
+    if (isClass(node, tss) && node.name?.text === className) {
       for (const member of node.members) {
         if (isClassProp(member, tss)) {
           names.push(member);
@@ -380,6 +388,10 @@ export function isClassProp(node: ts.Node, tss: typeof ts) {
   return tss.isPropertyDeclaration(node) || (tss.isMethodDeclaration(node) && tss.isIdentifier(node.name));
 }
 
+export function isClass(node: ts.Node, tss: typeof ts) {
+  return tss.isClassDeclaration(node) || tss.isClassExpression(node);
+}
+
 export function* getSharedItems<A, B>(
   arr1: A[],
   arr2: B[],
@@ -415,3 +427,8 @@ export const inVirtualPart = (sf: ts.SourceFile, textSpan: ts.TextSpan) => textS
 export const inVirtualHead = (headMap: HeadMap, textSpan: ts.TextSpan, tmpl: BobeTemplateInfo) =>
   tmpl.iifeStartInVirtual! + headMap.range![0] <= textSpan.start &&
   textSpan.start < tmpl.iifeStartInVirtual! + headMap.range![1];
+
+export const contains = (parent: ts.Node, child: ts.Node): boolean =>
+  // parent.pos 是包含注释和空白的起始位置
+  // parent.getStart() 是代码实际开始的位置
+  child.getStart() >= parent.getStart() && child.getEnd() <= parent.getEnd();

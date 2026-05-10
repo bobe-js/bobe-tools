@@ -1,7 +1,7 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { Bobe2ts, BOBE_DOM_PROP_TRANSFER, BOBE_PREFIX, IdGenerator } from './bobeToTs';
 import { log } from './global';
-import { getClassMembersInClass, isBobeIdentifier } from './util';
+import { getClassMembersInClass, isBobeTemplate, isClass } from './util';
 import { ParseError } from 'bobe';
 import { BobeTemplateInfo, HeadMap, IClassNode, SourceMapEntry, VirtualDocumentResult } from './type';
 
@@ -12,6 +12,7 @@ type TemplatePreInfo = {
   templateStart: number;
   uiName?: string;
   props?: string[];
+  typeExp?: string;
 };
 
 export function findBobeTemplatesInClass(
@@ -23,12 +24,13 @@ export function findBobeTemplatesInClass(
   const preInfos: TemplatePreInfo[] = [];
   const checker = program?.getTypeChecker();
   function visit(node: ts.Node) {
-    if (tss.isTaggedTemplateExpression(node) && isBobeIdentifier(node, tss)) {
+    if (isBobeTemplate(node, tss)) {
       const template = node.template;
       const typeArg = node.typeArguments?.[0];
       let props: string[] | undefined = undefined,
         parent = node.parent,
-        uiName: string | undefined = undefined;
+        uiName: string | undefined = undefined,
+        typeExp: string | undefined = undefined;
       for (let i = 0; i < 5 && parent; i++) {
         const parentIsAssign = tss.isPropertyDeclaration(parent);
         if (parentIsAssign) {
@@ -37,6 +39,7 @@ export function findBobeTemplatesInClass(
         }
       }
       if (typeArg && checker && uiName) {
+        typeExp = typeArg.getText();
         const typeNode = checker.getTypeAtLocation(typeArg);
         const propNodes = checker.getPropertiesOfType(typeNode);
         props = propNodes.map(prop => prop.name);
@@ -46,7 +49,15 @@ export function findBobeTemplatesInClass(
         : template.getText().slice(1, -1);
       // 模板内容在源文件中的起始 offset（反引号后第一个字符）
       const templateStart = template.getStart() + 1; // +1 跳过反引号
-      preInfos.push({ raw, uiName, props, className: classNode.name?.text || '', sf: sourceFile, templateStart });
+      preInfos.push({
+        raw,
+        uiName,
+        typeExp,
+        props,
+        className: classNode.name?.text || '',
+        sf: sourceFile,
+        templateStart
+      });
     } else {
       tss.forEachChild(node, visit);
     }
@@ -65,7 +76,7 @@ export function buildVirtualDocument(
   const templateInfos: BobeTemplateInfo[] = [];
 
   function visit(node: ts.Node) {
-    if ((tss.isClassDeclaration(node) || tss.isClassExpression(node)) && node.name) {
+    if (isClass(node, tss) && node.name) {
       const preInfos = findBobeTemplatesInClass(node, tss, sourceFile, program);
       if (preInfos.length > 0) {
         const { iifeCode, headMap, sourceMapsAndErrors } = buildIife(preInfos, node, tss);
@@ -157,13 +168,13 @@ let ${idGenerator.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
   const sourceMapsAndErrors = [];
 
   for (const preInfo of templatePreInfos) {
-    const { raw, props, uiName } = preInfo;
+    const { raw, props, typeExp } = preInfo;
     if (props) {
       header += '\n{const {';
       for (const prop of props) {
         header += `${prop}:${prop},`;
       }
-      header += `}=${uiName}.defineProps!;\n`;
+      header += `}=${typeExp};\n`;
     }
     const { output: astBody, sourceMap, errors } = new Bobe2ts(idGenerator, header.length, raw).process();
     sourceMapsAndErrors.push({

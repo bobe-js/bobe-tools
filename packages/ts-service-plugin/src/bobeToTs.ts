@@ -38,7 +38,7 @@ class Dent {
 }
 
 const BRACE_REG = /(^\$\{)|(^\{)|(\}$)/g;
-export const BOBE_PREFIX = '$Bobe';
+export const BOBE_PREFIX = '$Bobe'+Date.now().toString(36);
 export const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string, T> = {
   [P in K]?: T;
 };
