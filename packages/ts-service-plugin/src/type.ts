@@ -1,4 +1,5 @@
 import { ParseError, SourceLocation } from 'bobe';
+import type { Range } from './util';
 import ts from 'typescript';
 
 export type Position = SourceLocation['start'];
@@ -6,7 +7,7 @@ export type Position = SourceLocation['start'];
 export interface VirtualDocumentResult {
   code: string;
   /** 每个 bobe 模板对应一条记录 */
-  templates: BobeTemplateInfo[];
+  templates: Template[];
   sf?: ts.SourceFile;
 }
 export type IClassNode = ts.ClassDeclaration | ts.ClassExpression;
@@ -19,6 +20,18 @@ export type BobeTemplateInfo = {
   iifeStartInVirtual?: number;
   iifeCodeIndex?: number;
   errors: ParseError[];
+};
+
+export type Template = {
+  headClass?: Range;
+  headClassRanges?: Range[];
+  headTemplate?: Range;
+  headTemplateRanges?: Range[];
+  typeMap?: SourceMapEntry;
+  sourceMap: SourceMapEntry[];
+  errors: ParseError[];
+  virtualStart: number;
+  templateStart: number;
 };
 
 export type AbsMap = {

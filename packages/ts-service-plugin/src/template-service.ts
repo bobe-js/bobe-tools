@@ -3,10 +3,10 @@ import { log } from './global';
 import {
   AND,
   calcAbsSourceMap,
-  calcHeadSourceMap,
   createMemo,
   findPrecedingBobeTemplate,
   findPrecedingClassNode,
+  findTemplateTypePos,
   fixTextSpan,
   getClassMembersInClass,
   getRealName,
@@ -14,14 +14,14 @@ import {
   getVirtualName,
   inInsBrace,
   inVirtualPart,
-  isClassProp,
+  inWitchVirtualPart,
   isOverlap,
-  isVirtualFile
+  isVirtualFile,
+  uniqBy
 } from './util';
 import { sharedEntries, htmlData } from './data/webCustomData';
 import { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
-import { Position, SourceMapEntry, VirtualDocumentResult } from './type';
-import { matchIdStart2 } from 'bobe-shared';
+import { Position, VirtualDocumentResult } from './type';
 
 /** BobeTemplateService 方法接收的最小 context 对象 */
 export interface BobeContext {
@@ -188,13 +188,34 @@ export class BobeTemplateService {
       if (isVirtualFile(fileName)) {
         /*----------------- 在虚拟部分 -----------------*/
         if ((_inVirtualPart = inVirtualPart(sf!, textSpan))) {
-          const map = calcHeadSourceMap(textSpan.start, templates);
-          if (map) {
-            const { definitions: subDefs } = this._ls.getDefinitionAndBoundSpan(vFileName, map.virtualStart) || {};
+          const { template, range, part } = inWitchVirtualPart(textSpan.start, templates);
+          if (part === 'headClass') {
+            // 找定义时要往前查找，应该找 name: 这个位置
+            const { definitions: subDefs } = this._ls.getDefinitionAndBoundSpan(vFileName, range!.start) || {};
             subDefs?.forEach(subDef => {
               definitions.push({
                 ...subDef,
                 fileName: getRealName(subDef.fileName)
+              });
+            });
+          } else if (part === 'headTemplate') {
+            const { definitions: subDefs } = this._ls.getDefinitionAndBoundSpan(vFileName, range!.start) || {};
+            subDefs?.forEach(({ fileName, textSpan, ...subDef }) => {
+              const typeMap = template.typeMap!;
+              const { codeOffset, length, originOffset } = typeMap;
+              // 1. 找到的仍然在虚拟文档复制的 类型字面量位置，需要转换回原始位置
+              if (isVirtualFile(fileName) && textSpan.start >= codeOffset && textSpan.start < codeOffset + length) {
+                const spanLen = textSpan.length;
+                textSpan = {
+                  start: originOffset + textSpan.start - codeOffset,
+                  length: spanLen
+                };
+              }
+              // 2. 其余位置只修改 fileName
+              definitions.push({
+                fileName: getRealName(fileName),
+                textSpan,
+                ...subDef
               });
             });
           }
@@ -236,7 +257,65 @@ export class BobeTemplateService {
     /*----------------- 有 bobe 模板语法的文件 -----------------*/
     const vFileName = getVirtualName(fileName);
     const { templates, sf, code } = this.getVirtualResult(vFileName);
-    const refs = this._ls.findReferences(vFileName, position);
+    let refs = this._ls.findReferences(vFileName, position);
+    const typeVOffset = findTemplateTypePos(templates, position);
+    if (typeVOffset) {
+      const additions = this._ls.findReferences(vFileName, typeVOffset.virtualOffset);
+      if (additions?.length) {
+        if (!refs) {
+          refs = additions;
+        } else {
+          // TS 无法在闭包内窄化 let，用 const 快照供闭包访问
+          const refsArr = refs;
+          const typeOriginEnd = typeVOffset.originStart + typeVOffset.length;
+          const typeVirtualEnd = typeVOffset.virtualStart + typeVOffset.length;
+          // 预建索引：fileName+textSpan → refs 下标，用于规则 1 的 O(1) 查找
+          const refsIndex = new Map<string, number>();
+          // 预收集 definition 落在真实文件 type 范围内的 refs 下标，用于规则 2
+          const refsInType: number[] = [];
+          for (let i = 0; i < refsArr.length; i++) {
+            const d = refsArr[i].definition;
+            refsIndex.set(`${d.fileName}::${d.textSpan.start}::${d.textSpan.length}`, i);
+            const defEnd = d.textSpan.start + d.textSpan.length;
+            if (isOverlap(d.textSpan.start, defEnd, typeVOffset.originStart, typeOriginEnd)) {
+              refsInType.push(i);
+            }
+          }
+
+          for (const addSym of additions) {
+            const { definition: addDef, references: addRefs } = addSym;
+            const addDefEnd = addDef.textSpan.start + addDef.textSpan.length;
+            // 规则 1：同一文件 + 同一位置 的 definition 直接视为同一个符号
+            let matchIdx = refsIndex.get(`${addDef.fileName}::${addDef.textSpan.start}::${addDef.textSpan.length}`);
+            // 规则 2：addDef 落在虚拟文件的 type 范围内，且 refDef 落在真实文件的 type 范围内
+            // 说明二者是 bobe<SomeType> 中类型表达式在原文件与虚拟文件的两份映射，属于同一符号
+            if (matchIdx === undefined) {
+              if (isOverlap(addDef.textSpan.start, addDefEnd, typeVOffset.virtualStart, typeVirtualEnd)) {
+                matchIdx = refsInType.find(i => {
+                  const refDef = refsArr[i].definition;
+                  const refDefEnd = refDef.textSpan.start + refDef.textSpan.length;
+                  return isOverlap(refDef.textSpan.start, refDefEnd, typeVOffset.originStart, typeOriginEnd);
+                });
+              }
+            }
+            // 二次判断
+            if (matchIdx !== undefined) {
+              refsArr[matchIdx].references.push(...addRefs);
+            } else {
+              refsArr.push(addSym);
+            }
+          }
+          // 合并后按 文件+坐标 对 references 去重
+          refs = refsArr.map(sym => ({
+            ...sym,
+            references: uniqBy(
+              sym.references,
+              (r: ts.ReferencedSymbolEntry) => `${r.fileName}::${r.textSpan.start}::${r.textSpan.length}`
+            )
+          }));
+        }
+      }
+    }
     const newResult = refs?.map(({ definition, references }) => {
       // 是虚拟文件中的 定义
       if (isVirtualFile(definition.fileName)) definition.fileName = fileName;
@@ -249,10 +328,9 @@ export class BobeTemplateService {
           // 是生成的 IIFE 块中的引用
           if (inVirtualPart(sf!, ref.textSpan)) {
             // 1. head 中，因为解构的原因需要 二次查询 map 位置的引用
-            const map = calcHeadSourceMap(ref.textSpan.start, templates);
-            if (map) {
-              const halfLen = map.length >> 1;
-              const found = this._ls.findReferences(vFileName, map.virtualStart + halfLen + 1);
+            const { range, part } = inWitchVirtualPart(ref.textSpan.start, templates);
+            if (part) {
+              const found = this._ls.findReferences(vFileName, (range!.start + range!.end) >> 1);
               found?.forEach(({ references }) => {
                 references.forEach(subRef => {
                   const subTmplMap = calcAbsSourceMap(subRef.textSpan.start, templates, true);
@@ -273,6 +351,12 @@ export class BobeTemplateService {
               if (tmplMap) {
                 const newSpan = fixTextSpan(ref.textSpan, code, tmplMap);
                 ref.textSpan = newSpan;
+              }
+              // 不在 head 也不在 sourceMap 中，无法完成映射，
+              // 🌰： 重命名 bobe<{ foo: number }> 中的 foo
+              // 因为拷贝 { foo: number }， 此时会多一个虚拟部分的 foo 引用，它不需要映射
+              else {
+                return;
               }
             }
           }
@@ -300,7 +384,22 @@ export class BobeTemplateService {
     /*----------------- 有 bobe 模板语法的文件 -----------------*/
     const vFileName = getVirtualName(rawFileName);
     const { templates, sf, code } = this.getVirtualResult(vFileName);
-    const locations = this._ls.findRenameLocations(vFileName, position, findInStrings, findInComments, preferences);
+    let locations = this._ls.findRenameLocations(vFileName, position, findInStrings, findInComments, preferences);
+    const typeVOffset = findTemplateTypePos(templates, position);
+    if (typeVOffset) {
+      const additions = this._ls.findRenameLocations(
+        vFileName,
+        typeVOffset.virtualOffset,
+        findInStrings,
+        findInComments,
+        preferences
+      );
+      locations = [...(locations || []), ...(additions || [])];
+      locations = uniqBy(
+        locations as ts.RenameLocation[],
+        location => `${getRealName(location.fileName)} ${location.textSpan.start} ${location.textSpan.length}`
+      );
+    }
     const newLocations: ts.RenameLocation[] = [];
 
     locations?.forEach(({ fileName, textSpan, ...location }) => {
@@ -310,12 +409,11 @@ export class BobeTemplateService {
         // 是生成的 IIFE 块中的引用
         if (inVirtualPart(sf!, textSpan)) {
           // 1. head 中，因为解构的原因需要 二次查询 map 位置的引用
-          const map = calcHeadSourceMap(textSpan.start, templates);
-          if (map) {
-            const halfLen = map.length >> 1;
+          const { range, part } = inWitchVirtualPart(textSpan.start, templates);
+          if (part) {
             const found = this._ls.findRenameLocations(
               vFileName,
-              map.virtualStart + halfLen + 1,
+              (range!.start + range!.end) >> 1,
               findInStrings,
               findInComments,
               preferences
@@ -338,6 +436,12 @@ export class BobeTemplateService {
             if (tmplMap) {
               const newSpan = fixTextSpan(textSpan, code, tmplMap);
               textSpan = newSpan;
+            }
+            // 不在 head 也不在 sourceMap 中，无法完成映射，
+            // 🌰： 重命名 bobe<{ foo: number }> 中的 foo
+            // 此时会多一个虚拟部分的 foo 引用，它不需要映射
+            else {
+              return;
             }
           }
         }
@@ -388,7 +492,7 @@ export class BobeTemplateService {
 
     // 找到与当前 context 对应的模板（通过 backtick 后第一个字符的绝对 offset 匹配）
     const templateStartInSource = context.node.getStart() + 1;
-    const tmpl = templates.find(t => t.templateStartInSource === templateStartInSource);
+    const tmpl = templates.find(t => t.templateStart === templateStartInSource);
     if (!tmpl) return [];
 
     let rawDiags: ts.Diagnostic[];
@@ -405,7 +509,7 @@ export class BobeTemplateService {
       tmpl.sourceMap,
       (diag, entry) => {
         if (diag.start === undefined) return false;
-        const entryVirtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
+        const entryVirtualStart = entry.codeOffset;
         return isOverlap(
           entryVirtualStart,
           entryVirtualStart + entry.length,
@@ -416,13 +520,18 @@ export class BobeTemplateService {
       (diag, entry) => {
         // diag 较小会跳过
         if (diag.start === undefined) return false;
-        return diag.start > tmpl.iifeStartInVirtual! + entry.codeOffset;
+        return diag.start > entry.codeOffset;
       }
     );
     let iterRes = gen.next();
     while (!iterRes.done) {
       const [diag, entry] = iterRes.value;
-      result.push({ ...diag, start: entry.originOffset, length: entry.length });
+      const dtStart = diag.start! - entry.codeOffset;
+      if (dtStart >= 0) {
+        result.push({ ...diag, start: entry.originOffset + dtStart, length: diag.length });
+      } else {
+        result.push({ ...diag, start: entry.originOffset, length: entry.length });
+      }
       iterRes = gen.next();
     }
 
@@ -454,9 +563,9 @@ export class BobeTemplateService {
     const vFileName = getVirtualName(context.fileName);
     const { templates } = this.getVirtualResult(vFileName);
 
-    // 找到与当前 context 对应的模板（通过 backtick 后第一个字符的绝对 offset 匹配）
+    // 找到与当前 context 对应的模板（通过 反引号 后第一个字符的绝对 offset 匹配）
     const templateStartInSource = context.node.getStart() + 1;
-    const tmpl = templates.find(t => t.templateStartInSource === templateStartInSource);
+    const tmpl = templates.find(t => t.templateStart === templateStartInSource);
     if (!tmpl || !tmpl.errors.length) return [];
     const { errors } = tmpl;
     const sf = context.sf;
@@ -466,7 +575,7 @@ export class BobeTemplateService {
         code: err.code,
         messageText: err.message,
         file: sf,
-        start: err.loc?.start?.offset - 1,
+        start: templateStartInSource + err.loc?.start?.offset - 1,
         length: err.loc?.source?.length,
         source: 'bobe-js'
       } as ts.Diagnostic;

@@ -1,7 +1,6 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { Virtual_File_Exp, Virtual_File_Suffix } from './global';
-import { AbsMap, BobeTemplateInfo, HeadMap, IClassNode, SourceMapEntry } from './type';
-import { jsVarRegexp, matchId, matchIdStart2 } from 'bobe-shared';
+import { AbsMap, BobeTemplateInfo, HeadMap, IClassNode, Template } from './type';
 import { SourceLocation } from 'bobe';
 
 export class LRUCache<K = string, V = any> {
@@ -66,6 +65,16 @@ export function createMemo() {
     };
     return wrap as T;
   };
+}
+
+export function uniqBy<T>(arr: T[], keyFn: (item: T) => any): T[] {
+  const seen = new Set();
+  return arr.filter(item => {
+    const key = keyFn(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function getVirtualName(fileName: string) {
@@ -220,34 +229,52 @@ export function getClassMemberNames(className: string, rangeNode: ts.Node, tss: 
   return names;
 }
 
-export function calcAbsSourceMap(cursorOffset: number, templates: BobeTemplateInfo[], isVirtualCursor = false) {
-  let virtualStart: number | undefined;
-  let originStart: number, length: number;
+export function calcAbsSourceMap(cursorOffset: number, templates: Template[], isVirtualCursor = false) {
   const compareKey = isVirtualCursor ? 'codeOffset' : 'originOffset';
-  const baseKey = isVirtualCursor ? 'iifeStartInVirtual' : 'templateStartInSource';
+  const startKey = isVirtualCursor ? 'virtualStart' : 'templateStart';
   for (let i = templates.length; i--; ) {
-    const tmpl = templates[i];
-    // 比当前 tmpl 起始位置小，不属于这个模板
-    if (cursorOffset < tmpl[baseKey]!) continue;
-    for (const entry of tmpl.sourceMap) {
-      const eStart = tmpl[baseKey]! + entry[compareKey];
-      const eEnd = eStart + entry.length;
-      if (cursorOffset >= eStart && cursorOffset <= eEnd) {
-        virtualStart = tmpl.iifeStartInVirtual! + entry.codeOffset;
-        originStart = tmpl.templateStartInSource + entry.originOffset;
-        const dt = cursorOffset - eStart;
-        length = entry.length;
-        return {
-          virtualStart,
-          originStart,
-          virtualOffset: virtualStart + dt,
-          originOffset: originStart + dt,
-          length
-        };
+    const template = templates[i];
+    if (template[startKey] < cursorOffset) {
+      for (const map of template.sourceMap) {
+        if (cursorOffset >= map[compareKey] && cursorOffset <= map[compareKey] + map.length) {
+          const { codeOffset: virtualStart, originOffset: originStart, length } = map;
+          const dt = cursorOffset - map[compareKey];
+          return {
+            virtualStart,
+            originStart,
+            virtualOffset: virtualStart + dt,
+            originOffset: originStart + dt,
+            length
+          };
+        }
       }
     }
   }
 }
+
+export function inWitchVirtualPart(absCursorOffset: number, templates: Template[]) {
+  for (const template of templates) {
+    if (template.headClass?.contains(absCursorOffset)) {
+      let range: Range | undefined;
+      for (range of template.headClassRanges!) {
+        if (range.contains(absCursorOffset)) {
+          break;
+        }
+      }
+      return { template, part: 'headClass', range };
+    } else if (template.headTemplate?.contains(absCursorOffset)) {
+      let range: Range | undefined;
+      for (range of template.headTemplateRanges!) {
+        if (range.contains(absCursorOffset)) {
+          break;
+        }
+      }
+      return { template, part: 'headTemplate', range };
+    }
+  }
+  return { template: undefined, part: undefined, range: undefined };
+}
+
 /** 计算的是 IIFE 中 解构的 所有类成员的 映射*/
 export function calcHeadSourceMap(absCursorOffset: number, templates: BobeTemplateInfo[]) {
   let virtualStart: number | undefined;
@@ -380,6 +407,25 @@ export function findNodeAtPosition(tss: typeof ts, sf: ts.SourceFile, position: 
   return find(sf);
 }
 
+/** 当前位置是bobe 模板的类型声明，找一下在虚拟文件对应的位置 */
+export function findTemplateTypePos(templates: Template[], pos: number) {
+  for (const tmpl of templates) {
+    const { typeMap } = tmpl;
+    if (!typeMap) continue;
+    const { originOffset, codeOffset, length } = typeMap;
+    if (originOffset <= pos && pos < originOffset + length) {
+      const dt = pos - originOffset;
+      return {
+        virtualStart: codeOffset,
+        originStart: originOffset,
+        virtualOffset: codeOffset + dt,
+        originOffset: originOffset + dt,
+        length
+      };
+    }
+  }
+}
+
 export const domPropertyExp = /^[a-zA-Z][\w-]*$/;
 
 export const AND = `__BOBE_AND_${Date.now().toString(36)}__`;
@@ -432,3 +478,25 @@ export const contains = (parent: ts.Node, child: ts.Node): boolean =>
   // parent.pos 是包含注释和空白的起始位置
   // parent.getStart() 是代码实际开始的位置
   child.getStart() >= parent.getStart() && child.getEnd() <= parent.getEnd();
+
+export const processHandlers = (fns: ((node: ts.Node) => number | null | void)[], node: ts.Node) => {
+  for (const handler of fns) {
+    const shouldSkip = handler(node);
+    if (shouldSkip != null) {
+      // 1是跳过，0继续
+      return shouldSkip as unknown as boolean;
+    }
+  }
+  // 默认不跳过
+  return 0;
+};
+
+export class Range {
+  constructor(
+    public start: number,
+    public end: number
+  ) {}
+  contains(pos: number) {
+    return this.start <= pos && pos < this.end;
+  }
+}

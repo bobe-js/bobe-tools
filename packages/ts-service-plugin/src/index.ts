@@ -16,9 +16,10 @@ import {
   calcAbsSourceMap,
   fixTextSpan,
   inVirtualPart,
-  strHasBobeTemplate
+  strHasBobeTemplate,
+  inWitchVirtualPart
 } from './util';
-import { buildVirtualDocument } from './buildVirtualDocument';
+import { buildVirtualDocument1 } from './buildVirtualDocument';
 import { VirtualDocumentResult } from './type';
 
 export default (modules: { typescript: typeof ts }) => {
@@ -43,7 +44,7 @@ export default (modules: { typescript: typeof ts }) => {
         if (!sourceFile) {
           return { code: '', templates: [], sf: sourceFile };
         }
-        const result = buildVirtualDocument(sourceFile, tss, program);
+        const result = buildVirtualDocument1(sourceFile, tss, program);
         virtualDocCache.set(virtualFileName, { result, version });
         return result;
       };
@@ -160,7 +161,7 @@ export default (modules: { typescript: typeof ts }) => {
 
               /*----------------- 无 bobe 模板语法的文件 -----------------*/
               if (!hasBobeTemplate) {
-                const refSymbols = target.findReferences(fileName, position);
+                const refSymbols = wrappedLangService.findReferences(fileName, position);
                 const newRefSymbols = refSymbols?.map(it => {
                   const newRefs: ts.ReferenceEntry[] = [];
                   it.references.forEach(({ fileName, textSpan, ...ref }) => {
@@ -170,8 +171,25 @@ export default (modules: { typescript: typeof ts }) => {
                       if (!realSf) return;
                       // 1. 虚拟文件中非 IIFE 不分的引用不记录，否则引用会重复
                       if (!inVirtualPart(realSf, textSpan)) return;
-
-                      // 2. 在 IIFE 中，修正到原文件位置
+                      // 2. head 中，因为解构的原因需要 二次查询 map 位置的引用
+                      const { range, part } = inWitchVirtualPart(textSpan.start, templates);
+                      if (part) {
+                        const found = wrappedLangService.findReferences(fileName, (range!.start + range!.end) >> 1);
+                        found?.forEach(({ references }) => {
+                          references.forEach(subRef => {
+                            const subTmplMap = calcAbsSourceMap(subRef.textSpan.start, templates, true);
+                            if (subTmplMap) {
+                              subRef.textSpan = fixTextSpan(subRef.textSpan, code, subTmplMap);
+                              // 把所有 引用都映射到模板字符串中
+                              subRef.fileName = realName;
+                              newRefs.push(subRef);
+                            }
+                          });
+                        });
+                        // subRef 将代替原引用，所以原引用不应该被加入 newRefs
+                        return;
+                      }
+                      // 3. 在 IIFE 中，修正到原文件位置
                       const map = calcAbsSourceMap(textSpan.start, templates, true);
                       if (!map) return;
                       // 找到映射关系就修正
@@ -215,7 +233,7 @@ export default (modules: { typescript: typeof ts }) => {
 
               /*----------------- 无 bobe 模板语法的文件 -----------------*/
               if (!hasBobeTemplate) {
-                const renameLocations = target.findRenameLocations(
+                const renameLocations = wrappedLangService.findRenameLocations(
                   fileName,
                   position,
                   findInStrings,
@@ -230,7 +248,30 @@ export default (modules: { typescript: typeof ts }) => {
                     if (!realSf) return;
                     // 1. 虚拟文件中非 IIFE 不分的引用不记录，否则引用会重复
                     if (!inVirtualPart(realSf, textSpan)) return;
-                    // 2. 在 IIFE 中，修正到原文件位置
+                    // 2. iife 头部
+                    const { range, part } = inWitchVirtualPart(textSpan.start, templates);
+                    if (part) {
+                      const found = wrappedLangService.findRenameLocations(
+                        fileName,
+                        (range!.start + range!.end) >> 1,
+                        findInStrings,
+                        findInComments,
+                        preferences
+                      );
+                      found?.forEach(subLocation => {
+                        const subTmplMap = calcAbsSourceMap(subLocation.textSpan.start, templates, true);
+                        if (subTmplMap) {
+                          subLocation.textSpan = fixTextSpan(subLocation.textSpan, code, subTmplMap);
+                          // 把所有 引用都映射到模板字符串中
+                          subLocation.fileName = realName;
+                          newRenameLocations.push(subLocation);
+                        }
+                      });
+                      // subRef 将代替原引用，所以原引用不应该被加入 newRefs
+                      return;
+                    }
+
+                    // 3. 在 IIFE 中，修正到原文件位置
                     const map = calcAbsSourceMap(textSpan.start, templates, true);
                     if (!map) return;
                     // 找到映射关系就修正
@@ -258,7 +299,7 @@ export default (modules: { typescript: typeof ts }) => {
           if (prop === 'getSemanticDiagnostics') {
             return (fileName: string) => {
               const baseDiags = target.getSemanticDiagnostics(fileName);
-              const sf = info.languageService.getProgram()?.getSourceFile(fileName);
+              const sf = target.getProgram()?.getSourceFile(fileName);
               if (!sf) return baseDiags;
               const templateDiags: ts.Diagnostic[] = [];
               function visit(node: ts.Node) {
@@ -268,7 +309,7 @@ export default (modules: { typescript: typeof ts }) => {
                   const ctx = makeContext(tmpl, sf!, fileName, baseOffset);
                   const rawDiags = templateService.getSemanticDiagnostics(ctx as any);
                   for (const d of rawDiags) {
-                    templateDiags.push({ ...d, start: baseOffset + (d.start || 0) });
+                    templateDiags.push(d);
                   }
                   return;
                 }
@@ -282,7 +323,7 @@ export default (modules: { typescript: typeof ts }) => {
           if (prop === 'getSyntacticDiagnostics') {
             return (fileName: string) => {
               const baseDiags = target.getSyntacticDiagnostics(fileName);
-              const sf = info.languageService.getProgram()?.getSourceFile(fileName);
+              const sf = target.getProgram()?.getSourceFile(fileName);
               if (!sf) return baseDiags;
               const templateDiags: ts.Diagnostic[] = [];
               function visit(node: ts.Node) {
@@ -291,7 +332,7 @@ export default (modules: { typescript: typeof ts }) => {
                   const baseOffset = tmpl.getStart() + 1;
                   const ctx = makeContext(tmpl, sf!, fileName, baseOffset);
                   for (const d of templateService.getSyntacticDiagnostics(ctx as any)) {
-                    templateDiags.push({ ...d, start: baseOffset + 1 + (d.start || 0) });
+                    templateDiags.push(d);
                   }
                   return;
                 }

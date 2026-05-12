@@ -1,9 +1,8 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
-import { Bobe2ts, BOBE_DOM_PROP_TRANSFER, BOBE_PREFIX, IdGenerator } from './bobeToTs';
+import { Bobe2ts, BOBE_DOM_PROP_TRANSFER, IdGenerator } from './bobeToTs';
 import { log } from './global';
-import { getClassMembersInClass, isBobeTemplate, isClass } from './util';
-import { ParseError } from 'bobe';
-import { BobeTemplateInfo, HeadMap, IClassNode, SourceMapEntry, VirtualDocumentResult } from './type';
+import { getClassMembersInClass, isBobeIdentifier, isBobeTemplate, isClass, processHandlers, Range } from './util';
+import { IClassNode, Template, VirtualDocumentResult } from './type';
 
 type TemplatePreInfo = {
   raw: string;
@@ -66,127 +65,135 @@ export function findBobeTemplatesInClass(
   return preInfos;
 }
 
-export function buildVirtualDocument(
+let c: {
+  tss: typeof ts;
+  program?: ts.Program;
+  currentClass?: ts.ClassDeclaration | ts.ClassExpression;
+  builtHeadRange?: Range;
+  baseVOffset: number;
+  virtualCode: string;
+  templates: Template[];
+  idg?: IdGenerator;
+} = {} as any;
+export function buildVirtualDocument1(
   sourceFile: ts.SourceFile,
   tss: typeof ts,
   program?: ts.Program
 ): VirtualDocumentResult {
   const source = sourceFile.text;
-  const iifes: string[] = [];
-  const templateInfos: BobeTemplateInfo[] = [];
-
-  function visit(node: ts.Node) {
-    if (isClass(node, tss) && node.name) {
-      const preInfos = findBobeTemplatesInClass(node, tss, sourceFile, program);
-      if (preInfos.length > 0) {
-        const { iifeCode, headMap, sourceMapsAndErrors } = buildIife(preInfos, node, tss);
-        sourceMapsAndErrors.forEach(({ sourceMap, errors }, i) => {
-          const { templateStart } = preInfos[i];
-          templateInfos.push({
-            templateStartInSource: templateStart,
-            sourceMap,
-            headMap,
-            iifeCodeIndex: iifes.length,
-            errors
-          });
-        });
-        iifes.push(iifeCode);
-      }
-    } else {
-      tss.forEachChild(node, visit);
-    }
+  const virtualCode = source + '\nexport {};\n' + BOBE_DOM_PROP_TRANSFER;
+  const baseVOffset = virtualCode.length;
+  c = { tss, program, baseVOffset, virtualCode, templates: [] };
+  function walk(node: ts.Node) {
+    const skip = processHandlers([
+      beginClass, 
+      beginTemplate
+    ], node);
+    if (!skip) tss.forEachChild(node, walk);
+    processHandlers([
+      endClass, 
+      endTemplate
+    ], node);
   }
-
-  visit(sourceFile);
-  if (iifes.length === 0) return { code: source, templates: [], sf: sourceFile };
-
-  // 组装虚拟文档，同时计算每个 IIFE 的起始 offset
-  // export {} 使虚拟文件成为独立模块，避免与原始文件的顶层声明冲突
-  let virtualCode = source + '\nexport {};\n' + BOBE_DOM_PROP_TRANSFER;
-  const templates: VirtualDocumentResult['templates'] = [];
-  let iifeIdx = 0;
-  for (const info of templateInfos) {
-    if (info.iifeCodeIndex! > iifeIdx) {
-      virtualCode += iifes[iifeIdx] + '\n';
-      iifeIdx++;
-    }
-    const iifeStartInVirtual = virtualCode.length;
-    templates.push({
-      iifeStartInVirtual,
-      sourceMap: info.sourceMap,
-      headMap: info.headMap,
-      templateStartInSource: info.templateStartInSource,
-      errors: info.errors
-    });
-  }
-  // 完成遍历后把最后一个 iife 代码加入
-  virtualCode += iifes[iifeIdx];
-  log('虚拟文件\n', virtualCode);
-  return { code: virtualCode, templates, sf: sourceFile };
+  walk(sourceFile);
+  log('虚拟文件\n', c.virtualCode);
+  const result = { code: c.virtualCode, templates: c.templates, sf: sourceFile };
+  c = {} as any;
+  return result;
 }
 
-function buildIife(
-  templatePreInfos: TemplatePreInfo[],
-  classNode: IClassNode,
-  tss: typeof ts
-): {
-  iifeCode: string;
-  headMap: HeadMap;
-  sourceMapsAndErrors: { sourceMap: SourceMapEntry[]; errors: ParseError[] }[];
-} {
-  const className = classNode.name?.text;
-  let header = '(() => {\n';
-  const headMap: HeadMap = [];
-  headMap.className = className;
-  const members = getClassMembersInClass(classNode, tss);
-  if (members.length > 0) {
-    header += `const {`;
-
-    for (const mem of members) {
-      const nameText = mem.name!.getText();
-      const aliasText = `${nameText}:${nameText}`;
-      headMap.push({
-        originOffset: mem.name!.pos,
-        codeOffset: header.length,
-        length: aliasText.length
-      });
-      header += aliasText + ',';
-    }
-    header += `} = {} as any as ${className};\n`;
+function beginClass(node: ts.Node) {
+  if (!isClass(node, c.tss)) return;
+  c.currentClass = node;
+  return 0;
+}
+function endClass(node: ts.Node) {
+  if (!isClass(node, c.tss)) return;
+  c.currentClass = undefined;
+  if (c.builtHeadRange) {
+    c.builtHeadRange = undefined;
+    c.idg = undefined;
+    c.virtualCode += `}\n`;
   }
-  const lastItem = headMap[headMap.length - 1];
-  const end = lastItem ? lastItem.codeOffset + lastItem.length : 0;
-  headMap.range = [headMap[0].codeOffset || 0, end];
-  const idGenerator = new IdGenerator();
-  header += `let ${idGenerator.h}!:<K extends keyof HTMLElementTagNameMap>(
-  tag: K, 
-  options?: ElementCreationOptions
-) => Omit<HTMLElementTagNameMap[K], keyof ${BOBE_PREFIX}NativeProperties |'textContent' > & { text: string|number|undefined|null } & ${BOBE_PREFIX}NativeProperties & Record<string, any>;
-let ${idGenerator.t}!: ${BOBE_PREFIX}CreateTextOrComponent;
-`;
-
-  const sourceMapsAndErrors = [];
-
-  for (const preInfo of templatePreInfos) {
-    const { raw, props, typeExp } = preInfo;
-    if (props) {
-      header += '\n{const {';
-      for (const prop of props) {
-        header += `${prop}:${prop},`;
+  return;
+}
+function beginTemplate(node: ts.Node) {
+  if (!c.tss.isTaggedTemplateExpression(node)) return;
+  // 非 bobe 模板语法可以直接跳过
+  if (!isBobeIdentifier(node, c.tss)) return 1;
+  // bobe 模板语法需要为文件末尾添加东西
+  // 1. 为 class 添加类型上下文
+  const template = {} as any as Template;
+  if (c.currentClass && !c.builtHeadRange) {
+    c.idg = new IdGenerator();
+    const { currentClass } = c;
+    const className = currentClass.name!.getText();
+    const start = c.virtualCode.length;
+    const ranges: Range[] = [];
+    c.virtualCode += `{\nconst {`;
+    const members = getClassMembersInClass(currentClass, c.tss);
+    for (const member of members) {
+      const nameText = member.name!.getText();
+      const itemStart = c.virtualCode.length;
+      c.virtualCode += `${nameText}:${nameText},`;
+      const itemEnd = c.virtualCode.length;
+      ranges.push(new Range(itemStart, itemEnd));
+    }
+    c.virtualCode += `} = {} as any as ${className};\n`;
+    const end = c.virtualCode.length;
+    c.builtHeadRange = template.headClass = new Range(start, end);
+    template.headClassRanges = ranges;
+  }
+  c.virtualCode += '{\n';
+  // 2. 为泛型添加类型上下文
+  if (node.typeArguments) {
+    const typeArg = node.typeArguments[0];
+    const checker = c.program?.getTypeChecker();
+    if (checker) {
+      const typeNode = checker.getTypeAtLocation(typeArg);
+      const typeExp = typeArg.getText();
+      const originOffset = typeArg.getFullStart();
+      const propNodes = checker.getPropertiesOfType(typeNode);
+      /*----------------- 增加类型解构 -----------------*/
+      const start = c.virtualCode.length;
+      const ranges: Range[] = [];
+      c.virtualCode += `const {`;
+      for (const { name } of propNodes) {
+        const itemStart = c.virtualCode.length;
+        c.virtualCode += `${name}:${name},`;
+        const itemEnd = c.virtualCode.length;
+        ranges.push(new Range(itemStart, itemEnd));
       }
-      header += `}=${typeExp};\n`;
-    }
-    const { output: astBody, sourceMap, errors } = new Bobe2ts(idGenerator, header.length, raw).process();
-    sourceMapsAndErrors.push({
-      sourceMap,
-      errors
-    });
-    header += astBody;
-    if (props) {
-      header += '}\n';
+      const end = c.virtualCode.length;
+      c.virtualCode += `} = {} as any as `;
+      const codeOffset = c.virtualCode.length;
+      template.headTemplateRanges = ranges;
+      /*----------------- 记录类型位置的映射 -----------------*/
+      c.virtualCode += typeExp;
+      template.headTemplate = new Range(start, end);
+      template.typeMap = {
+        originOffset,
+        codeOffset,
+        length: typeExp.length
+      };
+      c.virtualCode += `;\n`;
     }
   }
 
-  const iifeCode = header + '\n})();';
-  return { iifeCode, headMap, sourceMapsAndErrors };
+  // 3. 构建虚拟文档
+  const templateStart = node.template.getFullStart() + 1;
+  const virtualStart = c.virtualCode.length;
+  const raw = node.template.getText().slice(1, -1);
+  const { output, sourceMap, errors } = new Bobe2ts(c.idg || new IdGenerator(), templateStart, virtualStart, raw).process();
+  c.virtualCode += output + `}\n`;
+  template.sourceMap = sourceMap;
+  template.errors = errors;
+  template.templateStart = templateStart;
+  template.virtualStart = virtualStart;
+  c.templates.push(template);
+  return 1;
+}
+function endTemplate(node: ts.Node) {
+  if (!isBobeTemplate(node, c.tss)) return;
+  return;
 }

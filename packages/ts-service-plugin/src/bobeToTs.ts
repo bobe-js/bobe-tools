@@ -60,6 +60,11 @@ type ${BOBE_PREFIX}CreateTextOrComponent = {
   <T extends new (...args: any[]) =>any>(input: T): InstanceType<T>;
   (input: any): Text;
 };
+let ${BOBE_PREFIX}_h!:<K extends keyof HTMLElementTagNameMap>(
+  tag: K, 
+  options?: ElementCreationOptions
+) => Omit<HTMLElementTagNameMap[K], keyof ${BOBE_PREFIX}NativeProperties |'textContent' > & { text: string|number|undefined|null } & ${BOBE_PREFIX}NativeProperties & Record<string, any>;
+let ${BOBE_PREFIX}_t!: ${BOBE_PREFIX}CreateTextOrComponent;
 `;
 
 export class Bobe2ts {
@@ -78,7 +83,7 @@ export class Bobe2ts {
     /** 表达式的字符长度 */
     length: number
   ) {
-    this.res.sourceMap.push({ originOffset: templateOffset, codeOffset: this.iifePrefixLength + codeOffset, length });
+    this.res.sourceMap.push({ originOffset: this.templateStart + templateOffset, codeOffset: this.virtualStart + codeOffset, length });
   }
   dent = new Dent(2);
   lines: string[] = [];
@@ -86,7 +91,8 @@ export class Bobe2ts {
 
   constructor(
     public idg: IdGenerator,
-    public iifePrefixLength: number,
+    public templateStart: number,
+    public virtualStart: number,
     public templateCode: string
   ) {
     const tokenizer = (this.tokenizer = new Tokenizer(() => undefined, false));
@@ -95,7 +101,7 @@ export class Bobe2ts {
       parseElementNode: {
         propsAdded: node => {
           const _node = node!;
-          this.output += `${this.dent.v}let ${this.idg.name}=${this.idg.h}('`;
+          this.output += `${this.dent.v}let ${this.idg.name}=${BOBE_PREFIX}_h('`;
           this.map(this.off(_node), this.output.length, _node.tagName.length);
           this.output += `${_node.tagName}');`;
           this.createSetPropsExp(_node.props);
@@ -122,7 +128,7 @@ export class Bobe2ts {
           // }
           // // 文本节点表达式
           // else {
-          this.output += `${this.dent.v}let ${this.idg.name}=${this.idg.t}(`;
+          this.output += `${this.dent.v}let ${this.idg.name}=${BOBE_PREFIX}_t(`;
           this.map(this.off(_node), this.output.length, source.length);
           this.output += `${sourceName});`;
           // }
