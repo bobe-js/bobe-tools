@@ -184,7 +184,7 @@ function beginTemplate(node: ts.Node) {
   const templateStart = node.template.getFullStart() + 1;
   const virtualStart = c.virtualCode.length;
   const raw = node.template.getText().slice(1, -1);
-  const { output, sourceMap, errors } = new Bobe2ts(c.idg || new IdGenerator(), templateStart, virtualStart, raw).process();
+  const { output, sourceMap, errors } = new Bobe2ts(c.idg || new IdGenerator(), templateStart, virtualStart, raw, c.program).process();
   c.virtualCode += output + `}\n`;
   template.sourceMap = sourceMap;
   template.errors = errors;

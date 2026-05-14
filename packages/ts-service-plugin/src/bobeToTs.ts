@@ -8,10 +8,12 @@ import type {
   TemplateNode,
   DynamicValue,
   StaticValue,
-  InterpolationNode
+  InterpolationNode,
+  PropertyValue
 } from 'bobe';
 import { log } from './global';
 import { SourceMapEntry } from './type';
+import { Program } from 'typescript/lib/tsserverlibrary';
 
 export interface BobeToTsResult {
   output: string;
@@ -38,7 +40,7 @@ class Dent {
 }
 
 const BRACE_REG = /(^\$\{)|(^\{)|(\}$)/g;
-export const BOBE_PREFIX = '$Bobe'+Date.now().toString(36);
+export const BOBE_PREFIX = '$Bobe' + Date.now().toString(36);
 export const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string, T> = {
   [P in K]?: T;
 };
@@ -83,7 +85,11 @@ export class Bobe2ts {
     /** 表达式的字符长度 */
     length: number
   ) {
-    this.res.sourceMap.push({ originOffset: this.templateStart + templateOffset, codeOffset: this.virtualStart + codeOffset, length });
+    this.res.sourceMap.push({
+      originOffset: this.templateStart + templateOffset,
+      codeOffset: this.virtualStart + codeOffset,
+      length
+    });
   }
   dent = new Dent(2);
   lines: string[] = [];
@@ -93,48 +99,62 @@ export class Bobe2ts {
     public idg: IdGenerator,
     public templateStart: number,
     public virtualStart: number,
-    public templateCode: string
+    public templateCode: string,
+    public program?: Program
   ) {
     const tokenizer = (this.tokenizer = new Tokenizer(() => undefined, false));
     tokenizer.setCode(templateCode);
     const compiler = (this.compiler = new Compiler(tokenizer, {
+      parsePropertyInlineFragment: {
+        enter: node => {
+          const prop = node!.parent! as Property & { inlineName: string };
+          const component = prop.parent! as ComponentNode;
+          const cmpInsName  = (component.componentName as PropertyValue & { varName: string }).varName;
+          const key = prop.key.key;
+          const inlineName = this.idg.name;
+          this.idg.i++;
+          prop.inlineName = inlineName;
+          this.output += `let ${inlineName}=({}: NonNullable<NonNullable<(typeof ${cmpInsName})['${key}']>['defineProps']>) => {\n`;
+        },
+        leave: () => {
+          this.output += `};\n`;
+        }
+      },
       parseElementNode: {
         propsAdded: node => {
           const _node = node!;
-          this.output += `${this.dent.v}let ${this.idg.name}=${BOBE_PREFIX}_h('`;
-          this.map(this.off(_node), this.output.length, _node.tagName.length);
-          this.output += `${_node.tagName}');`;
-          this.createSetPropsExp(_node.props);
+          const tagName = _node.tagName;
+          const varName = this.idg.name;
+          this.output += `${this.dent.v}let ${varName}=${BOBE_PREFIX}_h('`;
+          this.map(this.off(_node), this.output.length, tagName.length);
+          this.output += `${tagName}');`;
+          this.createSetPropsExp(_node.props, varName);
           this.output += `\n`;
           this.idg.i++;
         }
       },
-      parseComponentNode: {
-        propsAdded: node => {
-          const _node = node!;
-          const name = _node.componentName;
-          const value = String(name.value);
-          const isClass = value.match(/^\w+$/);
+      parseName: {
+        leave: node => {
+          const varName = this.idg.name;
+          this.idg.i++;
+          const name = node! as PropertyValue & { varName: string };
+          name.varName = varName;
           const source = name.loc!.source!;
           const sourceName = source.replace(BRACE_REG, match => {
             if (match.length === 1) return ' ';
             return '  ';
           });
-          // if (isClass) {
-          //   this.output += `${this.dent.v}let ${this.idg.name}=new `;
-          //   this.map(this.off(_node), this.output.length, source.length);
-
-          //   this.output += `${sourceName}();`;
-          // }
-          // // 文本节点表达式
-          // else {
-          this.output += `${this.dent.v}let ${this.idg.name}=${BOBE_PREFIX}_t(`;
-          this.map(this.off(_node), this.output.length, source.length);
-          this.output += `${sourceName});`;
-          // }
-          this.createSetPropsExp(_node.props);
+          this.output += `${this.dent.v}let ${varName}=${BOBE_PREFIX}_t(`;
+          this.map(this.off(name), this.output.length, source.length);
+          this.output += `${sourceName});\n`;
+        }
+      },
+      parseComponentNode: {
+        propsAdded: node => {
+          const _node = node!;
+          const name = _node.componentName! as PropertyValue & { varName: string };
+          this.createSetPropsExp(_node.props, name.varName);
           this.output += `\n`;
-          this.idg.i++;
         }
       },
       parseConditionalNode: {
@@ -187,10 +207,10 @@ export class Bobe2ts {
   off(n: { loc?: any }) {
     return n.loc!.start.offset - 1;
   }
-  createSetPropsExp = (props: Property[]) => {
-    const { name } = this.idg;
+  createSetPropsExp = (props: Property[], name: string) => {
     const nameDot = `${name}.`;
-    props.forEach(prop => {
+    props.forEach((_prop) => {
+      const prop = _prop as Property & { inlineName: string };
       const loc = prop.key.loc!;
       let { source: key } = loc;
       this.map(this.off(prop.key), this.output.length + nameDot.length, key.length);
@@ -234,7 +254,7 @@ export class Bobe2ts {
 export class IdGenerator {
   id = Date.now().toString(36);
   i = 0;
-   get name() {
+  get name() {
     return `a_${this.id}_${this.i}`;
   }
   get h() {
