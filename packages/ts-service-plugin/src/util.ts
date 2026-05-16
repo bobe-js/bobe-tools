@@ -254,22 +254,17 @@ export function calcAbsSourceMap(cursorOffset: number, templates: Template[], is
 
 export function inWitchVirtualPart(absCursorOffset: number, templates: Template[]) {
   for (const template of templates) {
-    if (template.headClass?.contains(absCursorOffset)) {
-      let range: Range | undefined;
-      for (range of template.headClassRanges!) {
-        if (range.contains(absCursorOffset)) {
-          break;
-        }
-      }
-      return { template, part: 'headClass', range };
-    } else if (template.headTemplate?.contains(absCursorOffset)) {
-      let range: Range | undefined;
-      for (range of template.headTemplateRanges!) {
-        if (range.contains(absCursorOffset)) {
-          break;
-        }
-      }
+    const range = template.headTemplate?.findRange(absCursorOffset);
+    // 属于模板 head 解构区
+    if (range) {
       return { template, part: 'headTemplate', range };
+    } else {
+      for (const area of template?.headAreas || []) {
+        const found = area.findRange(absCursorOffset);
+        if (found) {
+          return { template, part: 'headClass', range: found };
+        }
+      }
     }
   }
   return { template: undefined, part: undefined, range: undefined };
@@ -498,5 +493,32 @@ export class Range {
   ) {}
   contains(pos: number) {
     return this.start <= pos && pos < this.end;
+  }
+}
+
+export class Area {
+  ranges: Range[] = [];
+
+  get start() {
+    return this.ranges[0]?.start || -1;
+  }
+
+  get end() {
+    return this.ranges[this.ranges.length - 1]?.end || -1;
+  }
+
+  findRange(pos: number) {
+    if (!Range.prototype.contains.call(this, pos)) {
+      return;
+    }
+    for (const range of this.ranges) {
+      if (range.contains(pos)) {
+        return range;
+      }
+    }
+  }
+
+  addRange(start: number, end: number) {
+    this.ranges.push(new Range(start, end));
   }
 }

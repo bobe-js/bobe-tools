@@ -19,7 +19,7 @@ import {
   strHasBobeTemplate,
   inWitchVirtualPart
 } from './util';
-import { buildVirtualDocument1 } from './buildVirtualDocument';
+import { buildVirtualDocument } from './buildVirtualDocument';
 import { VirtualDocumentResult } from './type';
 
 export default (modules: { typescript: typeof ts }) => {
@@ -44,7 +44,7 @@ export default (modules: { typescript: typeof ts }) => {
         if (!sourceFile) {
           return { code: '', templates: [], sf: sourceFile };
         }
-        const result = buildVirtualDocument1(sourceFile, tss, program);
+        const result = buildVirtualDocument(sourceFile, tss, program);
         virtualDocCache.set(virtualFileName, { result, version });
         return result;
       };

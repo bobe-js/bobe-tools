@@ -12,7 +12,7 @@ import type {
   PropertyValue
 } from 'bobe';
 import { log } from './global';
-import { SourceMapEntry } from './type';
+import { BuildVDocCtx, SourceMapEntry } from './type';
 import { Program } from 'typescript/lib/tsserverlibrary';
 
 export interface BobeToTsResult {
@@ -95,13 +95,16 @@ export class Bobe2ts {
   lines: string[] = [];
   output = ``;
 
+  public idg: IdGenerator;
+  public program?: Program;
   constructor(
-    public idg: IdGenerator,
+    public c: BuildVDocCtx,
     public templateStart: number,
     public virtualStart: number,
-    public templateCode: string,
-    public program?: Program
+    public templateCode: string
   ) {
+    this.idg = c.idg || new IdGenerator();
+    this.program = c.program;
     const tokenizer = (this.tokenizer = new Tokenizer(() => undefined, false));
     tokenizer.setCode(templateCode);
     const compiler = (this.compiler = new Compiler(tokenizer, {
@@ -109,12 +112,14 @@ export class Bobe2ts {
         enter: node => {
           const prop = node!.parent! as Property & { inlineName: string };
           const component = prop.parent! as ComponentNode;
-          const cmpInsName  = (component.componentName as PropertyValue & { varName: string }).varName;
+          const cmpInsName = (component.componentName as PropertyValue & { varName: string }).varName;
           const key = prop.key.key;
           const inlineName = this.idg.name;
           this.idg.i++;
           prop.inlineName = inlineName;
-          this.output += `let ${inlineName}=({}: NonNullable<NonNullable<(typeof ${cmpInsName})['${key}']>['defineProps']>) => {\n`;
+          this.output += `let ${inlineName}=(`;
+          this.c.undoneDocPoint.push(this.output.length);
+          this.output += `{}: NonNullable<NonNullable<(typeof ${cmpInsName})['${key}']>['defineProps']>) => {\n`;
         },
         leave: () => {
           this.output += `};\n`;
@@ -209,7 +214,7 @@ export class Bobe2ts {
   }
   createSetPropsExp = (props: Property[], name: string) => {
     const nameDot = `${name}.`;
-    props.forEach((_prop) => {
+    props.forEach(_prop => {
       const prop = _prop as Property & { inlineName: string };
       const loc = prop.key.loc!;
       let { source: key } = loc;
@@ -227,6 +232,12 @@ export class Bobe2ts {
         this.output += 'null;';
         return;
       }
+      // 是文档片段
+      if (prop.inlineName) {
+        this.output += `${prop.inlineName} as any;`;
+        return;
+      }
+
       let { source: value } = prop.value.loc!;
       if (prop.value.type === NodeType.DynamicValue) {
         // 替换成空格

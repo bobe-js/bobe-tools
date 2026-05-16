@@ -650,6 +650,14 @@ export class BobeTemplateService {
       labelDetails: {
         description: 'bobe for'
       }
+    },
+    {
+      name: 'context',
+      kind: ts.ScriptElementKind.keyword,
+      sortText: '        4context',
+      labelDetails: {
+        description: 'bobe context'
+      }
     }
   ];
   // 辅助方法：根据符号标志返回对应的图标类型

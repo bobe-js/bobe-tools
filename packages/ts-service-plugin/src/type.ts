@@ -1,6 +1,7 @@
 import { ParseError, SourceLocation } from 'bobe';
-import type { Range } from './util';
+import type { Area, Range } from './util';
 import ts from 'typescript';
+import type { IdGenerator } from './bobeToTs';
 
 export type Position = SourceLocation['start'];
 
@@ -23,16 +24,26 @@ export type BobeTemplateInfo = {
 };
 
 export type Template = {
-  headClass?: Range;
-  headClassRanges?: Range[];
-  headTemplate?: Range;
-  headTemplateRanges?: Range[];
+  headAreas?: Area[];
+  headTemplate?: Area;
   typeMap?: SourceMapEntry;
   sourceMap: SourceMapEntry[];
   errors: ParseError[];
   virtualStart: number;
   templateStart: number;
 };
+
+export type BuildVDocCtx = {
+  tss: typeof ts;
+  idg?: IdGenerator;
+  program?: ts.Program;
+  currentClass?: ts.ClassDeclaration | ts.ClassExpression;
+  builtHeadAreas?: Area[];
+  undoneDocPoint: any[];
+  baseVOffset: number;
+  virtualCode: string;
+  templates: Template[];
+}
 
 export type AbsMap = {
   virtualStart: number;
