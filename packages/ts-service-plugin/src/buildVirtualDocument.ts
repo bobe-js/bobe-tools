@@ -1,7 +1,15 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { Bobe2ts, BOBE_DOM_PROP_TRANSFER, IdGenerator } from './bobeToTs';
 import { log } from './global';
-import { Area, getClassMembersInClass, isBobeIdentifier, isBobeTemplate, isClass, processHandlers, Range } from './util';
+import {
+  Area,
+  getClassMembersInClass,
+  isBobeIdentifier,
+  isBobeTemplate,
+  isClass,
+  processHandlers,
+  Range
+} from './util';
 import { BuildVDocCtx, IClassNode, Template, VirtualDocumentResult } from './type';
 
 type TemplatePreInfo = {
@@ -108,12 +116,12 @@ function beginTemplate(node: ts.Node) {
   if (!isBobeIdentifier(node, c.tss)) return 1;
   // bobe 模板语法需要为文件末尾添加东西
   // 1. 为 class 添加类型上下文
-  const template = {} as any as Template;
+  const template = { headAreas: [] } as any as Template;
   if (c.currentClass && !c.builtHeadAreas) {
     c.idg = new IdGenerator();
     const { currentClass } = c;
     const className = currentClass.name!.getText();
-    
+
     const area = new Area();
     c.virtualCode += `{\nconst {`;
     const members = getClassMembersInClass(currentClass, c.tss);
@@ -146,7 +154,7 @@ function beginTemplate(node: ts.Node) {
         const itemEnd = c.virtualCode.length;
         area.addRange(itemStart, itemEnd);
       }
-      
+
       c.virtualCode += `} = {} as any as `;
       const codeOffset = c.virtualCode.length;
       /*----------------- 记录类型位置的映射 -----------------*/
@@ -160,17 +168,14 @@ function beginTemplate(node: ts.Node) {
       c.virtualCode += `;\n`;
     }
   }
-
+  if (!c.tss.isNoSubstitutionTemplateLiteral(node.template)) {
+    c.tempStaticIns = node.template.templateSpans[Symbol.iterator]();
+  }
   // 3. 构建虚拟文档
   const templateStart = node.template.getFullStart() + 1;
   const virtualStart = c.virtualCode.length;
   const raw = node.template.getText().slice(1, -1);
-  const { output, sourceMap, errors } = new Bobe2ts(
-    c,
-    templateStart,
-    virtualStart,
-    raw,
-  ).process();
+  const { output, sourceMap, errors } = new Bobe2ts(c, template, templateStart, virtualStart, raw).process();
   c.virtualCode += output + `}\n`;
   template.sourceMap = sourceMap;
   template.errors = errors;

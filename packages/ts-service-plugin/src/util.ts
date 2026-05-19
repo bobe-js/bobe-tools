@@ -188,7 +188,7 @@ export function findPrecedingClassNode(
   return result;
 }
 
-export function findPrecedingBobeTemplate(targetNode: ts.Node, classNode: IClassNode, tss: typeof ts) {
+export function findPrecedingBobeTemplate(targetNode: ts.Node, classNode: ts.Node, tss: typeof ts) {
   let result: ts.TaggedTemplateExpression | undefined;
   function visit(node: ts.Node) {
     if (node.pos >= targetNode.pos) return;

@@ -12,8 +12,9 @@ import type {
   PropertyValue
 } from 'bobe';
 import { log } from './global';
-import { BuildVDocCtx, SourceMapEntry } from './type';
-import { Program } from 'typescript/lib/tsserverlibrary';
+import { BuildVDocCtx, SourceMapEntry, Template } from './type';
+import { TemplateSpan, Program, SymbolFlags, Type, TypeChecker, TypeFlags, Node } from 'typescript/lib/tsserverlibrary';
+import { Area } from './util';
 
 export interface BobeToTsResult {
   output: string;
@@ -85,20 +86,27 @@ export class Bobe2ts {
     /** 表达式的字符长度 */
     length: number
   ) {
-    this.res.sourceMap.push({
+    const item: SourceMapEntry = {
       originOffset: this.templateStart + templateOffset,
       codeOffset: this.virtualStart + codeOffset,
       length
-    });
+    };
+    this.res.sourceMap.push(item);
+    return item;
   }
   dent = new Dent(2);
   lines: string[] = [];
   output = ``;
+  nextInsExp() {
+    const { value } = this.c.tempStaticIns?.next() || {};
+    return value;
+  }
 
   public idg: IdGenerator;
   public program?: Program;
   constructor(
     public c: BuildVDocCtx,
+    public template: Template,
     public templateStart: number,
     public virtualStart: number,
     public templateCode: string
@@ -112,14 +120,36 @@ export class Bobe2ts {
         enter: node => {
           const prop = node!.parent! as Property & { inlineName: string };
           const component = prop.parent! as ComponentNode;
-          const cmpInsName = (component.componentName as PropertyValue & { varName: string }).varName;
+          const { varName: cmpInsName, templateSpan } = component.componentName as PropertyValue & {
+            varName: string;
+            templateSpan?: TemplateSpan;
+          };
           const key = prop.key.key;
           const inlineName = this.idg.name;
           this.idg.i++;
           prop.inlineName = inlineName;
           this.output += `let ${inlineName}=(`;
-          this.c.undoneDocPoint.push(this.output.length);
-          this.output += `{}: NonNullable<NonNullable<(typeof ${cmpInsName})['${key}']>['defineProps']>) => {\n`;
+          const rightBrace = `}: NonNullable<NonNullable<(typeof ${cmpInsName})['${key}']>['defineProps']>) => {\n`;
+
+          if (templateSpan && this.program) {
+            const area = new Area();
+            this.output += '{';
+            const checker = this.program.getTypeChecker();
+            const gotType = checker.getTypeAtLocation(templateSpan.expression);
+
+            const exec = new PropertyExtractor(checker, key, templateSpan.expression);
+            const names = exec.extractPropertyNames(gotType);
+            for (const name of names) {
+              const start = this.output.length;
+              this.output += `${name}:${name},`;
+              area.addRange(this.virtualStart + start, this.virtualStart + this.output.length);
+            }
+            this.output += rightBrace;
+            this.template.headAreas!.push(area);
+          } else {
+            this.c.undoneDocPoint.push(this.output.length);
+            this.output += `{${rightBrace}`;
+          }
         },
         leave: () => {
           this.output += `};\n`;
@@ -142,7 +172,7 @@ export class Bobe2ts {
         leave: node => {
           const varName = this.idg.name;
           this.idg.i++;
-          const name = node! as PropertyValue & { varName: string };
+          const name = node! as PropertyValue & { varName: string; templateSpan: TemplateSpan };
           name.varName = varName;
           const source = name.loc!.source!;
           const sourceName = source.replace(BRACE_REG, match => {
@@ -150,8 +180,19 @@ export class Bobe2ts {
             return '  ';
           });
           this.output += `${this.dent.v}let ${varName}=${BOBE_PREFIX}_t(`;
-          this.map(this.off(name), this.output.length, source.length);
+          const map = this.map(this.off(name), this.output.length, source.length);
           this.output += `${sourceName});\n`;
+
+          let ins: TemplateSpan | undefined;
+          while ((ins = this.nextInsExp()) != null) {
+            const insStart = ins.getFullStart();
+            if (insStart > map.originOffset) {
+              if (insStart < map.originOffset + map.length) {
+                name.templateSpan = ins;
+              }
+              break;
+            }
+          }
         }
       },
       parseComponentNode: {
@@ -276,6 +317,123 @@ export class IdGenerator {
   }
   get k() {
     return `k_${this.id}`;
+  }
+}
+
+export class PropertyExtractor {
+  constructor(private checker: TypeChecker, private key: string, private locationNode: Node) {}
+
+  /**
+   * 主入口：两步提取属性名
+   * 1. 解析 midType（通过 key 从原始类型中获取）
+   * 2. 从 midType 中提取属性名列表
+   * 中间任何一步不符合正向逻辑时返回空数组
+   */
+  public extractPropertyNames(type: Type): string[] {
+    if (!type || (type as any).intrinsicName === 'error') {
+      return [];
+    }
+
+    const midType = this.resolveMidType(type);
+    if (!midType) return [];
+    const midTStr = this.checker.typeToString(midType);
+    log('midType:', midTStr);
+
+    return this.extractNamesFromMidType(midType);
+  }
+
+  /**
+   * Step 1: 获取传入类型对应实例属性的 key 的类型 (midType)
+   * 1.1 classType 是类 → 获取实例类型 → 获取 instance.key 的类型
+   * 1.2 classType 是 { defineProps?: T } → 获取 defineProps.key 的类型
+   */
+  private resolveMidType(type: Type): Type | null {
+    if (this.isClassType(type)) {
+      const symbol = type.getSymbol() || type.aliasSymbol;
+      if (!symbol) return null;
+      const instanceType = this.checker.getDeclaredTypeOfSymbol(symbol);
+      if (!(instanceType.flags & TypeFlags.Object)) return null;
+      const targetProp = instanceType.getProperty(this.key);
+      if (!targetProp) return null;
+      return this.checker.getTypeOfSymbolAtLocation(targetProp, this.locationNode);
+    }
+
+    if (this.isObjectType(type)) {
+      const defineProps = type.getProperty('defineProps');
+      if (defineProps) {
+        const definePropsType = this.checker.getTypeOfSymbolAtLocation(defineProps, this.locationNode);
+        const targetProp = definePropsType.getProperty(this.key);
+        if (!targetProp) return null;
+        return this.checker.getTypeOfSymbolAtLocation(targetProp, this.locationNode);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Step 2: 处理 midType，提取属性名列表
+   * 2.1 midType 是 class → 获取其实例的所有属性名
+   * 2.2 midType 是 { defineProps?: T } → 获取 defineProps 的所有属性名
+   */
+  private extractNamesFromMidType(midType: Type): string[] {
+    if (midType.flags & TypeFlags.UnionOrIntersection) {
+      const types = (midType as any).types as Type[] | undefined;
+      if (types) {
+        for (const t of types) {
+          const names = this.extractNamesFromMidType(t);
+          if (names.length > 0) return names;
+        }
+      }
+      return [];
+    }
+
+    if (this.isClassType(midType)) {
+      const symbol = midType.getSymbol() || midType.aliasSymbol;
+      if (!symbol) return [];
+      const instanceType = this.checker.getDeclaredTypeOfSymbol(symbol);
+      if (!(instanceType.flags & TypeFlags.Object)) return [];
+      return this.getStandardProperties(instanceType);
+    }
+
+    if (this.isObjectType(midType)) {
+      const defineProps = midType.getProperty('defineProps');
+      if (defineProps) {
+        const definePropsType = this.checker.getTypeOfSymbolAtLocation(defineProps, this.locationNode);
+        return this.extractNamesFromMidType(definePropsType);
+      }
+      return this.getStandardProperties(midType);
+    }
+
+    return [];
+  }
+
+  /**
+   * 判断是否为 Class（构造函数静态类型）
+   */
+  private isClassType(type: Type): boolean {
+    const symbol = type.getSymbol() || type.aliasSymbol;
+    if (!symbol) return false;
+    return !!(symbol.flags & (SymbolFlags.Class | SymbolFlags.Function));
+  }
+
+  /**
+   * 判断是否为普通对象类型 (Object)
+   */
+  private isObjectType(type: Type): boolean {
+    return !!(type.flags & TypeFlags.Object);
+  }
+
+  /**
+   * 获取类型的所有属性名（排除 prototype 等元属性）
+   */
+  private getStandardProperties(type: Type): string[] {
+    try {
+      const props = this.checker.getPropertiesOfType(type);
+      return props.map(p => p.name).filter(name => name !== 'prototype');
+    } catch {
+      return [];
+    }
   }
 }
 

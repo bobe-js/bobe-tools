@@ -70,23 +70,24 @@ export class BobeTemplateService {
             kind: this.tss.ScriptElementKind.memberVariableElement,
             sortText: `00000000${i}${key}`
           }));
-
-          const bobeNode = findPrecedingBobeTemplate(context.node, classNode, this.tss);
-          const checker = this.info.languageService.getProgram()?.getTypeChecker();
-          if (bobeNode && checker) {
-            const typeArg = bobeNode.typeArguments?.[0];
-            if (typeArg) {
-              const typeNode = checker.getTypeAtLocation(typeArg);
-              checker.getPropertiesOfType(typeNode).forEach((prop, i) => {
-                entries.push({
-                  name: prop.name,
-                  kind: this.tss.ScriptElementKind.memberVariableElement,
-                  sortText: `000000000${i}${prop}`
-                });
+        }
+        const findSource = classNode || context.sf;
+        const bobeNode = findPrecedingBobeTemplate(context.node, findSource, this.tss);
+        const checker = this.info.languageService.getProgram()?.getTypeChecker();
+        if (bobeNode && checker) {
+          const typeArg = bobeNode.typeArguments?.[0];
+          if (typeArg) {
+            const typeNode = checker.getTypeAtLocation(typeArg);
+            checker.getPropertiesOfType(typeNode).forEach((prop, i) => {
+              entries.push({
+                name: prop.name,
+                kind: this.tss.ScriptElementKind.memberVariableElement,
+                sortText: `000000000${i}${prop}`
               });
-            }
+            });
           }
         }
+
         return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
       }
     } else {
