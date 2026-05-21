@@ -169,7 +169,8 @@ function beginTemplate(node: ts.Node) {
     }
   }
   if (!c.tss.isNoSubstitutionTemplateLiteral(node.template)) {
-    c.tempStaticIns = node.template.templateSpans[Symbol.iterator]();
+    const insArr = Array.from(node.template.templateSpans)
+    c.tempStaticIns = insArr[Symbol.iterator]();
   }
   // 3. 构建虚拟文档
   const templateStart = node.template.getFullStart() + 1;

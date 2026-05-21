@@ -22,6 +22,7 @@ import {
 import { sharedEntries, htmlData } from './data/webCustomData';
 import { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
 import { Position, VirtualDocumentResult } from './type';
+import { BOBE_PREFIX } from './bobeToTs';
 
 /** BobeTemplateService 方法接收的最小 context 对象 */
 export interface BobeContext {
@@ -58,55 +59,55 @@ export class BobeTemplateService {
     log('前置', currentLine.slice(0, position.column));
 
     /*----------------- 在 {} 内且当前字符不是 '.' -----------------*/
-    if (inInsBrace(currentLine, position.column)) {
-      const curr = currentLine[position.column - 1];
-      if (!['.', '"', "'"].some(c => c === curr)) {
-        const classNode = findPrecedingClassNode(context.node, context.sf, this.tss);
-        if (classNode) {
-          // TODO: 考虑 default class
-          const keys = getClassMembersInClass(classNode, this.tss);
-          entries = keys.map((key, i) => ({
-            name: key.name!.getText(),
-            kind: this.tss.ScriptElementKind.memberVariableElement,
-            sortText: `00000000${i}${key}`
-          }));
-        }
-        const findSource = classNode || context.sf;
-        const bobeNode = findPrecedingBobeTemplate(context.node, findSource, this.tss);
-        const checker = this.info.languageService.getProgram()?.getTypeChecker();
-        if (bobeNode && checker) {
-          const typeArg = bobeNode.typeArguments?.[0];
-          if (typeArg) {
-            const typeNode = checker.getTypeAtLocation(typeArg);
-            checker.getPropertiesOfType(typeNode).forEach((prop, i) => {
-              entries.push({
-                name: prop.name,
-                kind: this.tss.ScriptElementKind.memberVariableElement,
-                sortText: `000000000${i}${prop}`
-              });
-            });
-          }
-        }
+    // if (inInsBrace(currentLine, position.column)) {
+    //   const curr = currentLine[position.column - 1];
+    //   if (!['.', '"', "'"].some(c => c === curr)) {
+    //     const classNode = findPrecedingClassNode(context.node, context.sf, this.tss);
+    //     if (classNode) {
+    //       // TODO: 考虑 default class
+    //       const keys = getClassMembersInClass(classNode, this.tss);
+    //       entries = keys.map((key, i) => ({
+    //         name: key.name!.getText(),
+    //         kind: this.tss.ScriptElementKind.memberVariableElement,
+    //         sortText: `00000000${i}${key}`
+    //       }));
+    //     }
+    //     const findSource = classNode || context.sf;
+    //     const bobeNode = findPrecedingBobeTemplate(context.node, findSource, this.tss);
+    //     const checker = this.info.languageService.getProgram()?.getTypeChecker();
+    //     if (bobeNode && checker) {
+    //       const typeArg = bobeNode.typeArguments?.[0];
+    //       if (typeArg) {
+    //         const typeNode = checker.getTypeAtLocation(typeArg);
+    //         checker.getPropertiesOfType(typeNode).forEach((prop, i) => {
+    //           entries.push({
+    //             name: prop.name,
+    //             kind: this.tss.ScriptElementKind.memberVariableElement,
+    //             sortText: `000000000${i}${prop}`
+    //           });
+    //         });
+    //       }
+    //     }
 
-        return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
-      }
-    } else {
-      /*----------------- 输入位置为标签/关键字 -----------------*/
-      if (WHOLE_TEXT.test(prefix)) {
-        entries = this.getEntriesByTagPrefix(prefix);
-        return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
-      }
-      /*----------------- 输入位置为 dom 属性 -----------------*/
-      const quoteList = prefix.match(QUOTE) || [];
-      const keyMatch = prefix.match(PROP_TEXT);
-      const tagName = prefix.match(TAG_TEXT)?.[0];
-      if (quoteList.length % 2 === 0 && keyMatch && tagName) {
-        const propPrefix = keyMatch[1];
-        entries = this.getEntriesByTagPropPrefix(tagName + AND + propPrefix);
+    //     return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
+    //   }
+    // } else {
+    //   /*----------------- 输入位置为标签/关键字 -----------------*/
+    //   if (WHOLE_TEXT.test(prefix)) {
+    //     entries = this.getEntriesByTagPrefix(prefix);
+    //     return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
+    //   }
+    //   /*----------------- 输入位置为 dom 属性 -----------------*/
+    //   const quoteList = prefix.match(QUOTE) || [];
+    //   const keyMatch = prefix.match(PROP_TEXT);
+    //   const tagName = prefix.match(TAG_TEXT)?.[0];
+    //   if (quoteList.length % 2 === 0 && keyMatch && tagName) {
+    //     const propPrefix = keyMatch[1];
+    //     entries = this.getEntriesByTagPropPrefix(tagName + AND + propPrefix);
 
-        return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
-      }
-    }
+    //     return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
+    //   }
+    // }
 
     /*----------------- 其余情况使用 虚拟文档模拟 -----------------*/
     const vFileName = getVirtualName(context.fileName);
@@ -127,13 +128,31 @@ export class BobeTemplateService {
 
     const comp = this._ls.getCompletionsAtPosition(vFileName, map.virtualOffset, undefined);
     log('虚拟文档模拟', JSON.stringify(comp?.entries[0], undefined, 2));
-    log('是否有 hello', String(Boolean(comp?.entries.find(it => it.name === 'hello'))));
+    log('是否有 item', String(Boolean(comp?.entries.find(it => it.name === 'item'))));
+
+    /*----------------- 输入位置为标签/关键字 -----------------*/
+    if (WHOLE_TEXT.test(prefix)) {
+      entries = this.getEntriesByTagPrefix(prefix);
+      return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
+    }
+    /*----------------- 输入位置为 dom 属性 -----------------*/
+    const quoteList = prefix.match(QUOTE) || [];
+    const keyMatch = prefix.match(PROP_TEXT);
+    const tagName = prefix.match(TAG_TEXT)?.[0];
+    if (quoteList.length % 2 === 0 && keyMatch && tagName) {
+      const propPrefix = keyMatch[1];
+      entries = this.getEntriesByTagPropPrefix(tagName + AND + propPrefix);
+
+      return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
+    }
+
+    entries = comp?.entries.filter((it) => !it.name.startsWith(BOBE_PREFIX)) || []
 
     return {
       isGlobalCompletion: false,
       isMemberCompletion: false,
       isNewIdentifierLocation: false,
-      entries: comp?.entries || []
+      entries,
     };
   }
 
@@ -165,8 +184,6 @@ export class BobeTemplateService {
     position: Position,
     absOffset: number
   ): DefinitionInfoAndBoundSpan | undefined {
-    const lines = context.text.split(/\n/);
-    const currentLine = lines[position.line];
     const vFileName = getVirtualName(context.fileName);
 
     // 计算光标在模板字符串内的绝对 offset

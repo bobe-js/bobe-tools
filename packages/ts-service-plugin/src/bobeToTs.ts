@@ -98,8 +98,8 @@ export class Bobe2ts {
   lines: string[] = [];
   output = ``;
   nextInsExp() {
-    const { value } = this.c.tempStaticIns?.next() || {};
-    return value;
+    const nextData = this.c.tempStaticIns?.next();
+    return  nextData?.value;
   }
 
   public idg: IdGenerator;
@@ -182,7 +182,9 @@ export class Bobe2ts {
           this.output += `${this.dent.v}let ${varName}=${BOBE_PREFIX}_t(`;
           const map = this.map(this.off(name), this.output.length, source.length);
           this.output += `${sourceName});\n`;
-
+          if(name.type !== NodeType.StaticValue) {
+            return;
+          }
           let ins: TemplateSpan | undefined;
           while ((ins = this.nextInsExp()) != null) {
             const insStart = ins.getFullStart();
@@ -307,7 +309,7 @@ export class IdGenerator {
   id = Date.now().toString(36);
   i = 0;
   get name() {
-    return `a_${this.id}_${this.i}`;
+    return `${BOBE_PREFIX}_var_${this.id}_${this.i}`;
   }
   get h() {
     return `h_${this.id}`;
@@ -316,7 +318,7 @@ export class IdGenerator {
     return `t_${this.id}`;
   }
   get k() {
-    return `k_${this.id}`;
+    return `${BOBE_PREFIX}_for_key_${this.id}`;
   }
 }
 
