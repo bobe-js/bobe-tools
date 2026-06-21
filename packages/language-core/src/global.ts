@@ -1,7 +1,7 @@
 export const G: Record<any, any> = {};
 
 export function log(...args: (string | number)[]) {
-  G.log.info(args.join(' '));
+  G.log?.info?.(args.join(' '));
 }
 
 export const Virtual_File_Suffix = '__bobe_virtual_file__';

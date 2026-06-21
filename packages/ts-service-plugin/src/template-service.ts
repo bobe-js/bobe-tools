@@ -1,28 +1,23 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
-import { log } from './global';
+import { log } from 'bobe-language-core';
 import {
   AND,
   calcAbsSourceMap,
   createMemo,
-  findPrecedingBobeTemplate,
-  findPrecedingClassNode,
   findTemplateTypePos,
   fixTextSpan,
-  getClassMembersInClass,
   getRealName,
   getSharedItems,
   getVirtualName,
-  inInsBrace,
   inVirtualPart,
   inWitchVirtualPart,
   isOverlap,
   isVirtualFile,
   uniqBy
-} from './util';
+} from 'bobe-language-core';
 import { sharedEntries, htmlData } from './data/webCustomData';
 import { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
-import { Position, VirtualDocumentResult } from './type';
-import { BOBE_PREFIX } from './bobeToTs';
+import { Position, VirtualDocumentResult, BOBE_PREFIX } from 'bobe-language-core';
 
 /** BobeTemplateService 方法接收的最小 context 对象 */
 export interface BobeContext {
@@ -57,57 +52,6 @@ export class BobeTemplateService {
     log('当前行', currentLine);
     log('当前文件', context.fileName);
     log('前置', currentLine.slice(0, position.column));
-
-    /*----------------- 在 {} 内且当前字符不是 '.' -----------------*/
-    // if (inInsBrace(currentLine, position.column)) {
-    //   const curr = currentLine[position.column - 1];
-    //   if (!['.', '"', "'"].some(c => c === curr)) {
-    //     const classNode = findPrecedingClassNode(context.node, context.sf, this.tss);
-    //     if (classNode) {
-    //       // TODO: 考虑 default class
-    //       const keys = getClassMembersInClass(classNode, this.tss);
-    //       entries = keys.map((key, i) => ({
-    //         name: key.name!.getText(),
-    //         kind: this.tss.ScriptElementKind.memberVariableElement,
-    //         sortText: `00000000${i}${key}`
-    //       }));
-    //     }
-    //     const findSource = classNode || context.sf;
-    //     const bobeNode = findPrecedingBobeTemplate(context.node, findSource, this.tss);
-    //     const checker = this.info.languageService.getProgram()?.getTypeChecker();
-    //     if (bobeNode && checker) {
-    //       const typeArg = bobeNode.typeArguments?.[0];
-    //       if (typeArg) {
-    //         const typeNode = checker.getTypeAtLocation(typeArg);
-    //         checker.getPropertiesOfType(typeNode).forEach((prop, i) => {
-    //           entries.push({
-    //             name: prop.name,
-    //             kind: this.tss.ScriptElementKind.memberVariableElement,
-    //             sortText: `000000000${i}${prop}`
-    //           });
-    //         });
-    //       }
-    //     }
-
-    //     return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
-    //   }
-    // } else {
-    //   /*----------------- 输入位置为标签/关键字 -----------------*/
-    //   if (WHOLE_TEXT.test(prefix)) {
-    //     entries = this.getEntriesByTagPrefix(prefix);
-    //     return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: false, entries };
-    //   }
-    //   /*----------------- 输入位置为 dom 属性 -----------------*/
-    //   const quoteList = prefix.match(QUOTE) || [];
-    //   const keyMatch = prefix.match(PROP_TEXT);
-    //   const tagName = prefix.match(TAG_TEXT)?.[0];
-    //   if (quoteList.length % 2 === 0 && keyMatch && tagName) {
-    //     const propPrefix = keyMatch[1];
-    //     entries = this.getEntriesByTagPropPrefix(tagName + AND + propPrefix);
-
-    //     return { isGlobalCompletion: false, isMemberCompletion: true, isNewIdentifierLocation: false, entries };
-    //   }
-    // }
 
     /*----------------- 其余情况使用 虚拟文档模拟 -----------------*/
     const vFileName = getVirtualName(context.fileName);

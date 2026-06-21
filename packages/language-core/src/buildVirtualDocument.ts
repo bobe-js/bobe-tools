@@ -1,4 +1,4 @@
-import * as ts from 'typescript/lib/tsserverlibrary';
+import type * as ts from 'typescript';
 import { Bobe2ts, BOBE_DOM_PROP_TRANSFER, IdGenerator } from './bobeToTs';
 import { log } from './global';
 import {
@@ -169,7 +169,7 @@ function beginTemplate(node: ts.Node) {
     }
   }
   if (!c.tss.isNoSubstitutionTemplateLiteral(node.template)) {
-    const insArr = Array.from(node.template.templateSpans)
+    const insArr = Array.from(node.template.templateSpans);
     c.tempStaticIns = insArr[Symbol.iterator]();
   }
   // 3. 构建虚拟文档

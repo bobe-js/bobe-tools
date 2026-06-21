@@ -54,7 +54,7 @@
           "comment": "匹配行首或空格后的标签名",
           "begin": "(?<=^|\\s)([a-z0-9]+)(?=\\s|$|\\s+[a-zA-Z])",
           "beginCaptures": {
-            "1": { "name": "entity.name.tag.bobe" }
+            "1": { "name": "variable.object.property.bobe" }
           },
           "end": "(?=$)",
           "patterns": [

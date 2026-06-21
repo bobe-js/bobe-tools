@@ -1,7 +1,7 @@
-import * as ts from 'typescript/lib/tsserverlibrary';
+import type * as ts from 'typescript';
 import { Virtual_File_Exp, Virtual_File_Suffix } from './global';
 import { AbsMap, BobeTemplateInfo, HeadMap, IClassNode, Template } from './type';
-import { SourceLocation } from 'bobe';
+import type { SourceLocation } from 'bobe';
 
 export class LRUCache<K = string, V = any> {
   private maxSize: number;

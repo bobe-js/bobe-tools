@@ -1,0 +1,24 @@
+{
+  "name": "bobe-language-core",
+  "displayName": "bobe-language-core",
+  "description": "Shared Bobe language utilities for editor and TypeScript service integrations.",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/bobe-language-core.cjs.js",
+  "module": "dist/bobe-language-core.esm.js",
+  "browser": "dist/bobe-language-core.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c rollup.config.ts --configPlugin esbuild",
+    "dev": "rollup -w -c rollup.config.ts --configPlugin esbuild"
+  },
+  "dependencies": {
+    "bobe": "^0.0.73"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "bobe-editor",
+  "displayName": "bobe-editor",
+  "description": "Online Bobe editor with virtual files, diagnostics and sandbox preview.",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/bobe-editor.cjs.js",
+  "module": "dist/bobe-editor.esm.js",
+  "browser": "dist/bobe-editor.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/bobe-editor.esm.js",
+      "require": "./dist/bobe-editor.cjs.js"
+    },
+    "./full": {
+      "types": "./dist/full.d.ts",
+      "import": "./dist/full.esm.js",
+      "require": "./dist/full.cjs.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c rollup.config.ts --configPlugin esbuild",
+    "dev": "vite --host 0.0.0.0",
+    "demo:build": "vite build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "aoye": "^0.0.73",
+    "bobe": "^0.0.73",
+    "bobe-dom": "^0.0.73",
+    "bobe-language-core": "workspace:*",
+    "monaco-editor": "^0.55.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.16"
+  },
+  "peerDependencies": {
+    "aoye": "^0.0.73",
+    "bobe": "^0.0.73",
+    "bobe-dom": "^0.0.73"
+  },
+  "peerDependenciesMeta": {
+    "aoye": {
+      "optional": true
+    },
+    "bobe": {
+      "optional": true
+    },
+    "bobe-dom": {
+      "optional": true
+    }
+  }
+}

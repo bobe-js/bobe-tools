@@ -15,7 +15,7 @@
     "dev": "rollup -w -c rollup.config.ts --configPlugin esbuild"
   },
   "dependencies": {
-    "typescript": "^6.0.2",
-    "typescript-template-language-service-decorator": "^2.3.2"
+    "bobe-language-core": "workspace:*",
+    "typescript": "^6.0.2"
   }
 }

@@ -1,6 +1,6 @@
 import * as ts from 'typescript/lib/tsserverlibrary';
 import { BobeTemplateService } from './template-service';
-import { G } from './global';
+import { G } from 'bobe-language-core';
 import {
   getVirtualName,
   isVirtualFile,
@@ -18,9 +18,8 @@ import {
   inVirtualPart,
   strHasBobeTemplate,
   inWitchVirtualPart
-} from './util';
-import { buildVirtualDocument } from './buildVirtualDocument';
-import { VirtualDocumentResult } from './type';
+} from 'bobe-language-core';
+import { buildVirtualDocument, type VirtualDocumentResult } from 'bobe-language-core';
 
 export default (modules: { typescript: typeof ts }) => {
   return {
@@ -114,7 +113,7 @@ export default (modules: { typescript: typeof ts }) => {
 
       const templateService = new BobeTemplateService(tss, wrappedLangService, info.project, getVirtualResult, info);
 
-      // ---- 自己实现 decorator 逻辑，不依赖 typescript-template-language-service-decorator ----
+      // ---- 自己实现 language service 拦截逻辑 ----
 
       // 代理原始 info.languageService，拦截模板相关方法
       // getProgram 不拦截 → 返回原始 program（不含虚拟文件）→ tsserver 不崩溃

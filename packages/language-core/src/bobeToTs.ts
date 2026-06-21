@@ -13,7 +13,8 @@ import type {
 } from 'bobe';
 import { log } from './global';
 import { BuildVDocCtx, SourceMapEntry, Template } from './type';
-import { TemplateSpan, Program, SymbolFlags, Type, TypeChecker, TypeFlags, Node } from 'typescript/lib/tsserverlibrary';
+import { SymbolFlags, TypeFlags } from 'typescript';
+import type { TemplateSpan, Program, Type, TypeChecker, Node } from 'typescript';
 import { Area } from './util';
 
 export interface BobeToTsResult {

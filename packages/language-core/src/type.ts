@@ -1,6 +1,6 @@
 import { ParseError, SourceLocation } from 'bobe';
 import type { Area, Range } from './util';
-import ts from 'typescript';
+import type * as ts from 'typescript';
 import type { IdGenerator } from './bobeToTs';
 
 export type Position = SourceLocation['start'];
@@ -10,7 +10,7 @@ export interface VirtualDocumentResult {
   /** 每个 bobe 模板对应一条记录 */
   templates: Template[];
   sf?: ts.SourceFile;
-}
+};
 export type IClassNode = ts.ClassDeclaration | ts.ClassExpression;
 export type BobeTemplateInfo = {
   /** 该模板字符串在原始源文件中的起始 offset（反引号后第一个字符） */
