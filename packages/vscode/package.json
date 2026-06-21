@@ -3,7 +3,7 @@
   "displayName": "Bobe",
   "icon": "",
   "description": "bobe",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -15,10 +15,12 @@
   },
   "publisher": "smooth-cat",
   "contributes": {
-    "typescriptServerPlugins": [{
-      "name": "bobe-ts-service-plugin",
-      "enableForWorkspaceTypeScriptVersions": true
-    }],
+    "typescriptServerPlugins": [
+      {
+        "name": "bobe-ts-service-plugin",
+        "enableForWorkspaceTypeScriptVersions": true
+      }
+    ],
     "languages": [
       {
         "id": "bobe",
