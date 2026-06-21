@@ -1,7 +1,7 @@
 {
   "name": "bobe",
   "displayName": "Bobe",
-  "icon": "",
+  "icon": "./icon.png",
   "description": "bobe",
   "version": "0.0.3",
   "engines": {

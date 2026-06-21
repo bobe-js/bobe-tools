@@ -81,54 +81,10 @@ jobs:
 
       - name: Stage VSCode extension
         if: ${{ inputs.publish_vscode }}
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
-
-          const workspace = process.env.GITHUB_WORKSPACE;
-          const stage = path.join(workspace, '.release/vscode');
-          const vscodeDir = path.join(workspace, 'packages/vscode');
-          const pluginDir = path.join(workspace, 'packages/ts-service-plugin');
-          const pluginStageDir = path.join(stage, 'node_modules/bobe-ts-service-plugin');
-
-          const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
-          const writeJson = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
-          const copyDir = (from, to) => {
-            fs.cpSync(from, to, {
-              recursive: true,
-              filter: source => {
-                const parts = source.split(path.sep);
-                return !parts.includes('node_modules');
-              }
-            });
-          };
-
-          fs.rmSync(stage, { recursive: true, force: true });
-          fs.mkdirSync(stage, { recursive: true });
-          copyDir(vscodeDir, stage);
-
-          const rootPkgPath = path.join(stage, 'package.json');
-          const rootPkg = readJson(rootPkgPath);
-          const pluginPkg = readJson(path.join(pluginDir, 'package.json'));
-          rootPkg.dependencies = {
-            ...(rootPkg.dependencies || {}),
-            'bobe-ts-service-plugin': pluginPkg.version
-          };
-          writeJson(rootPkgPath, rootPkg);
-
-          fs.mkdirSync(pluginStageDir, { recursive: true });
-          copyDir(path.join(pluginDir, 'dist'), path.join(pluginStageDir, 'dist'));
-          writeJson(path.join(pluginStageDir, 'package.json'), {
-            name: pluginPkg.name,
-            version: pluginPkg.version,
-            main: pluginPkg.main,
-            types: pluginPkg.types,
-          });
-          NODE
+        run: node "$GITHUB_WORKSPACE/scripts/stage-vscode-extension.js"
       - name: Publish VSCode extension
         if: ${{ inputs.publish_vscode }}
-        working-directory: .release/vscode
+        working-directory: ${{ github.workspace }}/.release/vscode
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
