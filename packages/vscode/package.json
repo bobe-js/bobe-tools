@@ -58,6 +58,11 @@
       }
     ]
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bobe-js/bobe-tools"
+  },
+  "homepage": "https://github.com/bobe-js/bobe-tools",
   "dependencies": {
     "bobe-ts-service-plugin": "workspace:*"
   }
