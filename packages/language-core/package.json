@@ -1,7 +1,7 @@
 {
   "name": "@bobe-js/lang-core",
   "description": "Shared Bobe language utilities for editor and TypeScript service integrations.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "main": "dist/bobe-language-core.cjs",
   "module": "dist/bobe-language-core.esm.js",
@@ -23,9 +23,6 @@
   },
   "dependencies": {
     "bobe": "^0.0.73"
-  },
-  "devDependencies": {
-    "typescript": "^6.0.2"
   },
   "repository": {
     "type": "git",

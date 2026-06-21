@@ -68,20 +68,12 @@ importers:
       bobe:
         specifier: ^0.0.73
         version: 0.0.73
-    devDependencies:
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
 
   packages/ts-service-plugin:
     dependencies:
       '@bobe-js/lang-core':
         specifier: workspace:*
         version: link:../language-core
-    devDependencies:
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
 
   packages/vscode:
     dependencies:

@@ -1,4 +1,6 @@
 import esbuild from 'rollup-plugin-esbuild';
+import nodeResolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
 import dts from 'rollup-plugin-dts';
 import { RollupOptions } from 'rollup';
 import fs from 'fs';
@@ -15,12 +17,14 @@ export default [
     input: 'src/index.ts',
     output: { file: pkg.main, format: 'cjs', sourcemap: true },
     plugins: [
+      nodeResolve({ extensions: ['.ts', '.js', '.json', '.node'], preferBuiltins: true }),
+      commonjs(),
       esbuild({
         target: 'node14',
         tsconfig: path.resolve(__dirname, 'tsconfig.json')
       })
     ],
-    external: [/^typescript/, '@bobe-js/lang-core']
+    external: [/^typescript/]
   },
   // 2. 类型构建
   {

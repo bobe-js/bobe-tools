@@ -13,7 +13,7 @@ import type {
 } from 'bobe';
 import { log } from './global';
 import { BuildVDocCtx, SourceMapEntry, Template } from './type';
-import { SymbolFlags, TypeFlags } from 'typescript';
+import type * as ts from 'typescript';
 import type { TemplateSpan, Program, Type, TypeChecker, Node } from 'typescript';
 import { Area } from './util';
 
@@ -138,7 +138,7 @@ export class Bobe2ts {
             const checker = this.program.getTypeChecker();
             const gotType = checker.getTypeAtLocation(templateSpan.expression);
 
-            const exec = new PropertyExtractor(checker, key, templateSpan.expression);
+            const exec = new PropertyExtractor(checker, key, templateSpan.expression, this.c.tss);
             const names = exec.extractPropertyNames(gotType);
             for (const name of names) {
               const start = this.output.length;
@@ -324,7 +324,7 @@ export class IdGenerator {
 }
 
 export class PropertyExtractor {
-  constructor(private checker: TypeChecker, private key: string, private locationNode: Node) {}
+  constructor(private checker: TypeChecker, private key: string, private locationNode: Node, private tss: typeof ts) {}
 
   /**
    * 主入口：两步提取属性名
@@ -355,7 +355,7 @@ export class PropertyExtractor {
       const symbol = type.getSymbol() || type.aliasSymbol;
       if (!symbol) return null;
       const instanceType = this.checker.getDeclaredTypeOfSymbol(symbol);
-      if (!(instanceType.flags & TypeFlags.Object)) return null;
+      if (!(instanceType.flags & this.tss.TypeFlags.Object)) return null;
       const targetProp = instanceType.getProperty(this.key);
       if (!targetProp) return null;
       return this.checker.getTypeOfSymbolAtLocation(targetProp, this.locationNode);
@@ -380,7 +380,7 @@ export class PropertyExtractor {
    * 2.2 midType 是 { defineProps?: T } → 获取 defineProps 的所有属性名
    */
   private extractNamesFromMidType(midType: Type): string[] {
-    if (midType.flags & TypeFlags.UnionOrIntersection) {
+    if (midType.flags & this.tss.TypeFlags.UnionOrIntersection) {
       const types = (midType as any).types as Type[] | undefined;
       if (types) {
         for (const t of types) {
@@ -395,7 +395,7 @@ export class PropertyExtractor {
       const symbol = midType.getSymbol() || midType.aliasSymbol;
       if (!symbol) return [];
       const instanceType = this.checker.getDeclaredTypeOfSymbol(symbol);
-      if (!(instanceType.flags & TypeFlags.Object)) return [];
+      if (!(instanceType.flags & this.tss.TypeFlags.Object)) return [];
       return this.getStandardProperties(instanceType);
     }
 
@@ -417,14 +417,14 @@ export class PropertyExtractor {
   private isClassType(type: Type): boolean {
     const symbol = type.getSymbol() || type.aliasSymbol;
     if (!symbol) return false;
-    return !!(symbol.flags & (SymbolFlags.Class | SymbolFlags.Function));
+    return !!(symbol.flags & (this.tss.SymbolFlags.Class | this.tss.SymbolFlags.Function));
   }
 
   /**
    * 判断是否为普通对象类型 (Object)
    */
   private isObjectType(type: Type): boolean {
-    return !!(type.flags & TypeFlags.Object);
+    return !!(type.flags & this.tss.TypeFlags.Object);
   }
 
   /**
