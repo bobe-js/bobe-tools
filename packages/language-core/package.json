@@ -1,13 +1,19 @@
 {
-  "name": "bobe-language-core",
-  "displayName": "bobe-language-core",
+  "name": "@bobe-js/lang-core",
   "description": "Shared Bobe language utilities for editor and TypeScript service integrations.",
   "version": "0.0.1",
   "type": "module",
-  "main": "dist/bobe-language-core.cjs.js",
+  "main": "dist/bobe-language-core.cjs",
   "module": "dist/bobe-language-core.esm.js",
   "browser": "dist/bobe-language-core.esm.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/bobe-language-core.esm.js",
+      "require": "./dist/bobe-language-core.cjs"
+    }
+  },
   "files": [
     "dist"
   ],

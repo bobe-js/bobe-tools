@@ -41,6 +41,9 @@ importers:
 
   packages/editor:
     devDependencies:
+      '@bobe-js/lang-core':
+        specifier: workspace:*
+        version: link:../language-core
       aoye:
         specifier: ^0.0.73
         version: 0.0.73
@@ -50,9 +53,6 @@ importers:
       bobe-dom:
         specifier: ^0.0.73
         version: 0.0.73
-      bobe-language-core:
-        specifier: workspace:*
-        version: link:../language-core
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
@@ -75,9 +75,10 @@ importers:
 
   packages/ts-service-plugin:
     dependencies:
-      bobe-language-core:
+      '@bobe-js/lang-core':
         specifier: workspace:*
         version: link:../language-core
+    devDependencies:
       typescript:
         specifier: ^6.0.2
         version: 6.0.2

@@ -6,7 +6,7 @@ import {
   getRealName,
   getVirtualName,
   type VirtualDocumentResult
-} from 'bobe-language-core';
+} from '@bobe-js/lang-core';
 import type { EditorDiagnostic } from './types';
 import { isCodeFile, normalizePath, VirtualFileSystem } from './vfs';
 

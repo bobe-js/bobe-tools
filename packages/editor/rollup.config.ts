@@ -55,7 +55,7 @@ export default [
   {
     input: 'src/full.ts',
     output: [
-      { file: 'dist/full.cjs.js', format: 'cjs', sourcemap: true, inlineDynamicImports: true },
+      { file: 'dist/full.cjs', format: 'cjs', sourcemap: true, inlineDynamicImports: true },
       { file: 'dist/full.esm.js', format: 'esm', sourcemap: true, inlineDynamicImports: true }
     ],
     plugins: jsPlugins()

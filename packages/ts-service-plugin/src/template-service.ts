@@ -1,5 +1,5 @@
-import * as ts from 'typescript/lib/tsserverlibrary';
-import { log } from 'bobe-language-core';
+import type * as ts from 'typescript/lib/tsserverlibrary';
+import { log } from '@bobe-js/lang-core';
 import {
   AND,
   calcAbsSourceMap,
@@ -14,10 +14,10 @@ import {
   isOverlap,
   isVirtualFile,
   uniqBy
-} from 'bobe-language-core';
-import { sharedEntries, htmlData } from './data/webCustomData';
-import { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
-import { Position, VirtualDocumentResult, BOBE_PREFIX } from 'bobe-language-core';
+} from '@bobe-js/lang-core';
+import { createSharedEntries, htmlData } from './data/webCustomData';
+import type { DefinitionInfoAndBoundSpan } from 'typescript/lib/tsserverlibrary';
+import { Position, VirtualDocumentResult, BOBE_PREFIX } from '@bobe-js/lang-core';
 
 /** BobeTemplateService 方法接收的最小 context 对象 */
 export interface BobeContext {
@@ -34,6 +34,8 @@ const QUOTE = /'|"/g;
 const TAG_TEXT = /(?!(for|if|else))^\w+/;
 const PROP_TEXT = /(?:^|\s)([a-zA-Z@\-\[\]\(\)]*)$/;
 export class BobeTemplateService {
+  private sharedEntries = createSharedEntries(this.tss);
+
   constructor(
     public tss: typeof ts,
     public _ls: ts.LanguageService,
@@ -424,7 +426,7 @@ export class BobeTemplateService {
           sortText: `00000000${tag.name}`
         };
       });
-    const filteredKeyWordEntries = BobeTemplateService.KeyWordEntries.filter(entry => entry.name.startsWith(prefix));
+    const filteredKeyWordEntries = this.getKeywordEntries().filter(entry => entry.name.startsWith(prefix));
     return [...filteredHTMLEntries, ...filteredKeyWordEntries];
   });
 
@@ -445,7 +447,7 @@ export class BobeTemplateService {
           } as ts.CompletionEntry;
         }) || [];
     log('props 匹配', JSON.stringify(propEntries[0], undefined, 2));
-    return [...propEntries, ...sharedEntries];
+    return [...propEntries, ...this.sharedEntries];
   });
 
   getSemanticDiagnostics(context: BobeContext): ts.Diagnostic[] {
@@ -533,7 +535,7 @@ export class BobeTemplateService {
     const sf = context.sf;
     return errors.map(err => {
       return {
-        category: ts.DiagnosticCategory.Error,
+        category: this.tss.DiagnosticCategory.Error,
         code: err.code,
         messageText: err.message,
         file: sf,
@@ -580,48 +582,50 @@ export class BobeTemplateService {
   //   return docs[name] || '这是 DOM 属性的详细描述。';
   // }
 
-  static KeyWordEntries: ts.CompletionEntry[] = [
-    {
-      name: 'if',
-      kind: ts.ScriptElementKind.keyword,
-      sortText: '        1if',
-      labelDetails: {
-        description: 'bobe if'
+  private getKeywordEntries(): ts.CompletionEntry[] {
+    return [
+      {
+        name: 'if',
+        kind: this.tss.ScriptElementKind.keyword,
+        sortText: '        1if',
+        labelDetails: {
+          description: 'bobe if'
+        }
+      },
+      {
+        name: 'else',
+        kind: this.tss.ScriptElementKind.keyword,
+        sortText: '        2else',
+        labelDetails: {
+          description: 'bobe else'
+        }
+      },
+      {
+        name: 'fail',
+        kind: this.tss.ScriptElementKind.keyword,
+        sortText: '        2else',
+        labelDetails: {
+          description: 'fail 条件渲染'
+        }
+      },
+      {
+        name: 'for',
+        kind: this.tss.ScriptElementKind.keyword,
+        sortText: '        3for',
+        labelDetails: {
+          description: 'bobe for'
+        }
+      },
+      {
+        name: 'context',
+        kind: this.tss.ScriptElementKind.keyword,
+        sortText: '        4context',
+        labelDetails: {
+          description: 'bobe context'
+        }
       }
-    },
-    {
-      name: 'else',
-      kind: ts.ScriptElementKind.keyword,
-      sortText: '        2else',
-      labelDetails: {
-        description: 'bobe else'
-      }
-    },
-    {
-      name: 'fail',
-      kind: ts.ScriptElementKind.keyword,
-      sortText: '        2else',
-      labelDetails: {
-        description: 'fail 条件渲染'
-      }
-    },
-    {
-      name: 'for',
-      kind: ts.ScriptElementKind.keyword,
-      sortText: '        3for',
-      labelDetails: {
-        description: 'bobe for'
-      }
-    },
-    {
-      name: 'context',
-      kind: ts.ScriptElementKind.keyword,
-      sortText: '        4context',
-      labelDetails: {
-        description: 'bobe context'
-      }
-    }
-  ];
+    ];
+  }
   // 辅助方法：根据符号标志返回对应的图标类型
   private getCompletionKind(symbol: ts.Symbol): ts.ScriptElementKind {
     const flags = symbol.getFlags();

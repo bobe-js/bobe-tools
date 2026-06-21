@@ -1,6 +1,6 @@
-import * as ts from 'typescript/lib/tsserverlibrary';
+import type * as ts from 'typescript/lib/tsserverlibrary';
 import { BobeTemplateService } from './template-service';
-import { G } from 'bobe-language-core';
+import { G } from '@bobe-js/lang-core';
 import {
   getVirtualName,
   isVirtualFile,
@@ -18,8 +18,8 @@ import {
   inVirtualPart,
   strHasBobeTemplate,
   inWitchVirtualPart
-} from 'bobe-language-core';
-import { buildVirtualDocument, type VirtualDocumentResult } from 'bobe-language-core';
+} from '@bobe-js/lang-core';
+import { buildVirtualDocument, type VirtualDocumentResult } from '@bobe-js/lang-core';
 
 export default (modules: { typescript: typeof ts }) => {
   return {

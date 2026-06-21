@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CompletionEntry, ScriptElementKind } from "typescript";
+import type * as ts from 'typescript/lib/tsserverlibrary';
 const heightLevelEvents = [
   'onclick',
   'onchange',
@@ -11909,21 +11909,26 @@ export const htmlData = {
 	]
 };
 
-export const sharedEntries = htmlData.globalAttributes.map(prop => {
-  return {
-    name: prop.name,
-    kind: ScriptElementKind.memberVariableElement,
-    sortText: `00000000${prop.name}`,
-    insertText: prop.name[0] === 'o' && prop.name[1] === 'n' ? `${prop.name}={$0}` : `${prop.name}='$0'`,
-    isSnippet: true,
-  } as CompletionEntry;
-}).concat(
-  ...heightLevelEvents.map((name, i) => ({
-    name,
-    kind: ScriptElementKind.memberVariableElement,
-    sortText: `000000000${i}${name}`,
-    insertText: `${name}={$0}`,
-    isSnippet: true,
-  } as CompletionEntry))
-);
-
+export const createSharedEntries = (tss: typeof ts): ts.CompletionEntry[] =>
+  htmlData.globalAttributes
+    .map(prop => {
+      return {
+        name: prop.name,
+        kind: tss.ScriptElementKind.memberVariableElement,
+        sortText: `00000000${prop.name}`,
+        insertText: prop.name[0] === 'o' && prop.name[1] === 'n' ? `${prop.name}={$0}` : `${prop.name}='$0'`,
+        isSnippet: true
+      } as ts.CompletionEntry;
+    })
+    .concat(
+      ...heightLevelEvents.map(
+        (name, i) =>
+          ({
+            name,
+            kind: tss.ScriptElementKind.memberVariableElement,
+            sortText: `000000000${i}${name}`,
+            insertText: `${name}={$0}`,
+            isSnippet: true
+          }) as ts.CompletionEntry
+      )
+    );

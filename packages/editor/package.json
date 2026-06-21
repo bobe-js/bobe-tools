@@ -1,10 +1,9 @@
 {
-  "name": "bobe-editor",
-  "displayName": "bobe-editor",
+  "name": "@bobe-js/editor",
   "description": "Online Bobe editor with virtual files, diagnostics and sandbox preview.",
   "version": "0.0.1",
   "type": "module",
-  "main": "dist/bobe-editor.cjs.js",
+  "main": "dist/bobe-editor.cjs",
   "module": "dist/bobe-editor.esm.js",
   "browser": "dist/bobe-editor.esm.js",
   "types": "dist/index.d.ts",
@@ -12,12 +11,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/bobe-editor.esm.js",
-      "require": "./dist/bobe-editor.cjs.js"
+      "require": "./dist/bobe-editor.cjs"
     },
     "./full": {
       "types": "./dist/full.d.ts",
       "import": "./dist/full.esm.js",
-      "require": "./dist/full.cjs.js"
+      "require": "./dist/full.cjs"
     }
   },
   "files": [
@@ -33,7 +32,7 @@
     "aoye": "^0.0.73",
     "bobe": "^0.0.73",
     "bobe-dom": "^0.0.73",
-    "bobe-language-core": "workspace:*",
+    "@bobe-js/lang-core": "workspace:*",
     "monaco-editor": "^0.55.1",
     "typescript": "^6.0.2",
     "vite": "^8.0.16"
