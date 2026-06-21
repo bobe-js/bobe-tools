@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 选择版本更新类型 (patch, minor, major)
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      publish_vscode:
+        description: Publish VSCode extension
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release packages and extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup pnpm and npm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.0 --activate
+          npm install -g npm@^11.5.1
+          node --version
+          npm --version
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump package versions
+        run: |
+          pnpm --filter './packages/**' -r exec npm version "${{ inputs.release_type }}" --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./packages/editor/package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build release workspace packages
+        run: pnpm -r --workspace-concurrency=1 --if-present --filter '@bobe-js/*...' --filter 'bobe^...' build
+
+      - name: Publish npm packages
+        run: pnpm -r --filter '@bobe-js/*' publish --provenance --access=public --registry="https://registry.npmjs.org" --no-git-checks
+
+      - name: Stage VSCode extension
+        if: ${{ inputs.publish_vscode }}
+        run: pnpm --filter bobe deploy --prod --legacy "$GITHUB_WORKSPACE/.release/vscode"
+
+      - name: Publish VSCode extension
+        if: ${{ inputs.publish_vscode }}
+        working-directory: .release/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::Missing VSCE_PAT secret."
+            exit 1
+          fi
+          pnpm dlx @vscode/vsce publish -p "$VSCE_PAT"
+
+      - name: Commit and Push Changes
+        run: |
+          git add packages/*/package.json .github/workflows/npm-publish.yml
+          git commit -m "release: $NEW_VERSION"
+          git tag "v$NEW_VERSION"
+          git push origin HEAD:main --tags

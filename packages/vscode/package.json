@@ -1,6 +1,7 @@
 {
   "name": "bobe",
-  "displayName": "bobe",
+  "displayName": "Bobe",
+  "icon": "",
   "description": "bobe",
   "version": "0.0.1",
   "engines": {
@@ -10,8 +11,9 @@
     "Programming Languages"
   ],
   "scripts": {
-    "build": "rspack build -c ./rspack.config.js"
+    "build": "echo 'success'"
   },
+  "publisher": "smooth-cat",
   "contributes": {
     "typescriptServerPlugins": [{
       "name": "bobe-ts-service-plugin",
