@@ -3,7 +3,7 @@
   "displayName": "Bobe",
   "icon": "./icon.png",
   "description": "bobe",
-  "version": "0.0.4",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.110.0"
   },

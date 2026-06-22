@@ -1,7 +1,7 @@
 {
   "name": "@bobe-js/editor",
   "description": "Online Bobe editor with virtual files, diagnostics and sandbox preview.",
-  "version": "0.0.4",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/bobe-editor.cjs",
   "module": "dist/bobe-editor.esm.js",
