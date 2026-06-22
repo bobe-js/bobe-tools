@@ -242,6 +242,7 @@ type Omit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;
 type Pick<T, K extends keyof T> = { [P in K]: T[P] };
 type Exclude<T, U> = T extends U ? never : T;
 type InstanceType<T extends new (...args: any) => any> = T extends new (...args: any) => infer R ? R : any;
+type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : any;
 interface Array<T> { length: number; forEach(callbackfn: (value: T, index: number, array: T[]) => void): void; push(...items: T[]): number; map<U>(callbackfn: (value: T, index: number, array: T[]) => U): U[]; }
 interface ReadonlyArray<T> { length: number; forEach(callbackfn: (value: T, index: number, array: readonly T[]) => void): void; }
 interface TemplateStringsArray extends ReadonlyArray<string> { readonly raw: readonly string[]; }

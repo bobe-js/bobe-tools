@@ -59,9 +59,35 @@ function createBobeTsTokenizer() {
       bobeTag: [
         [/\s+/, 'white'],
         [/<[^`]*>/, 'type.identifier'],
-        [/`/, { token: 'string.delimiter', next: '@bobeTemplate' }]
+        [/`/, { token: 'string.delimiter', next: '@bobeTemplateStart' }]
       ],
+      bobeTemplateStart: bobeTemplateStartRules('@pop'),
       bobeTemplate: bobeTemplateRules('@pop'),
+      bobeComponentExpression: [
+        [/\}(?=<)/, { token: 'delimiter.bracket', switchTo: '@bobeComponentTypeArgs' }],
+        [/\}/, { token: 'delimiter.bracket', next: '@pop' }],
+        [/\/\/.*$/, 'comment'],
+        [/\/\*/, 'comment', '@comment'],
+        [/"/, 'string', '@stringDouble'],
+        [/'/, 'string', '@stringSingle'],
+        [/[{}()[\]]/, '@brackets'],
+        [/[a-zA-Z_$][\w$]*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+        [/\d+(\.\d+)?/, 'number'],
+        [/[=><!~?:&|+\-*\/\^%]+/, 'operator']
+      ],
+      bobeComponentTypeArgs: [
+        [/=>/, 'operator'],
+        [/</, { token: 'type.identifier', next: '@bobeComponentTypeArgs' }],
+        [/>/, { token: 'type.identifier', next: '@pop' }],
+        [/\/\/.*$/, 'comment'],
+        [/\/\*/, 'comment', '@comment'],
+        [/"/, 'string', '@stringDouble'],
+        [/'/, 'string', '@stringSingle'],
+        [/[{}()[\],.;:?]/, '@brackets'],
+        [/[a-zA-Z_$][\w$]*/, { cases: { '@keywords': 'keyword', '@default': 'type.identifier' } }],
+        [/\d+(\.\d+)?/, 'number'],
+        [/[=!~?:&|+\-*\/\^%]+/, 'operator']
+      ],
       bobeStringDouble: [[/[^\\"$]+/, 'string'], [/\$\{/, { token: 'delimiter.bracket', next: '@bobeExpression' }], [/\\./, 'string.escape'], [/"/, 'string', '@pop']],
       bobeStringSingle: [[/[^\\'$]+/, 'string'], [/\$\{/, { token: 'delimiter.bracket', next: '@bobeExpression' }], [/\\./, 'string.escape'], [/'/, 'string', '@pop']],
       bobeExpression: [
@@ -93,7 +119,33 @@ function createBobeTokenizer() {
     defaultToken: '',
     tokenPostfix: '.bobe',
     tokenizer: {
-      root: bobeTemplateRules(undefined),
+      root: bobeTemplateStartRules(undefined),
+      bobeTemplate: bobeTemplateRules(undefined),
+      bobeComponentExpression: [
+        [/\}(?=<)/, { token: 'delimiter.bracket', switchTo: '@bobeComponentTypeArgs' }],
+        [/\}/, { token: 'delimiter.bracket', next: '@pop' }],
+        [/\/\/.*$/, 'comment'],
+        [/\/\*/, 'comment', '@comment'],
+        [/"/, 'string', '@bobeStringDouble'],
+        [/'/, 'string', '@bobeStringSingle'],
+        [/[{}()[\]]/, '@brackets'],
+        [/[a-zA-Z_$][\w$]*/, 'identifier'],
+        [/\d+(\.\d+)?/, 'number'],
+        [/[=><!~?:&|+\-*\/\^%]+/, 'operator']
+      ],
+      bobeComponentTypeArgs: [
+        [/=>/, 'operator'],
+        [/</, { token: 'type.identifier', next: '@bobeComponentTypeArgs' }],
+        [/>/, { token: 'type.identifier', next: '@pop' }],
+        [/\/\/.*$/, 'comment'],
+        [/\/\*/, 'comment', '@comment'],
+        [/"/, 'string', '@bobeStringDouble'],
+        [/'/, 'string', '@bobeStringSingle'],
+        [/[{}()[\],.;:?]/, '@brackets'],
+        [/[a-zA-Z_$][\w$]*/, 'type.identifier'],
+        [/\d+(\.\d+)?/, 'number'],
+        [/[=!~?:&|+\-*\/\^%]+/, 'operator']
+      ],
       bobeExpression: [
         [/\}/, { token: 'delimiter.bracket', next: '@pop' }],
         [/\/\/.*$/, 'comment'],
@@ -112,9 +164,17 @@ function createBobeTokenizer() {
   };
 }
 
+function bobeTemplateStartRules(popOnBacktick: string | undefined) {
+  return [
+    [/\s+/, 'white'],
+    [/(?!(?:if|else|for|tp|context)\b)[a-z][\w-]*(?:-[a-z][\w-]*)*/, { token: 'tag', switchTo: '@bobeTemplate' }],
+    [/./, { token: '', goBack: 1, switchTo: '@bobeTemplate' }]
+  ];
+}
+
 function bobeTemplateRules(popOnBacktick: string | undefined) {
   const rules: any[] = [
-    [/\$\{/, { token: 'delimiter.bracket', next: '@bobeExpression' }],
+    [/\$\{/, { token: 'delimiter.bracket', next: '@bobeComponentExpression' }],
     [/(?<==)\{/, { token: 'delimiter.bracket', next: '@bobeExpression' }],
     [/#.*$/, 'comment'],
     [/^\s*(if|else|for|tp|context)\b/, 'keyword'],

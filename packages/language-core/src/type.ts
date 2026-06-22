@@ -39,6 +39,7 @@ export type BuildVDocCtx = {
   program?: ts.Program;
   currentClass?: ts.ClassDeclaration | ts.ClassExpression;
   builtHeadAreas?: Area[];
+  builtHeadTail?: string;
   tempStaticIns?: ArrayIterator<ts.TemplateSpan>;
   undoneDocPoint: any[];
   baseVOffset: number;

@@ -42,6 +42,15 @@ class Dent {
 }
 
 const BRACE_REG = /(^\$\{)|(^\{)|(\}$)/g;
+type ComponentTypeArgument = { raw: string; loc?: StaticValue['loc'] };
+type ComponentWithTypeArguments = ComponentNode & {
+  typeArguments?: ComponentTypeArgument[];
+  typeArgumentsLoc?: StaticValue['loc'];
+};
+type ComponentNameValue = PropertyValue & {
+  varName: string;
+  templateSpan?: TemplateSpan;
+};
 export const BOBE_PREFIX = '$Bobe' + Date.now().toString(36);
 export const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string, T> = {
   [P in K]?: T;
@@ -49,25 +58,36 @@ export const BOBE_DOM_PROP_TRANSFER = `type ${BOBE_PREFIX}ToMap<K extends string
 type ${BOBE_PREFIX}BooleanProps = ${BOBE_PREFIX}ToMap<
   'disabled' | 'checked' | 'selected' | 'readonly' | 'required' | 
   'multiple' | 'hidden' | 'autofocus' | 'novalidate' | 'ismap' | 
-  'open' | 'reversed' | 'indeterminate', 
+  'open' | 'reversed' | 'indeterminate' |
+  'ariaAtomic' | 'ariaBusy' | 'ariaChecked' | 'ariaCurrent' |
+  'ariaDisabled' | 'ariaExpanded' | 'ariaHasPopup' | 'ariaHidden' |
+  'ariaInvalid' | 'ariaModal' | 'ariaMultiLine' | 'ariaMultiSelectable' |
+  'ariaPressed' | 'ariaReadOnly' | 'ariaRequired' | 'ariaSelected',
   boolean|string|undefined|null
 >;
 type ${BOBE_PREFIX}NumericProps = ${BOBE_PREFIX}ToMap<
-  'style'|'value' | 'placeholder' | 'title' | 'alt' | 'width' | 'height' | 'columnCount' | 'tabIndex' | 'maxLength' | 
+  'children' | 'href' | 'style'|'value' | 'placeholder' | 'title' | 'alt' | 'width' | 'height' | 'columnCount' | 'tabIndex' | 'maxLength' |
   'minLength' | 'size' | 'rows' | 'cols' | 'span' | 'start' | 
   'valueAsNumber' | 'max' | 'min' | 'step', 
   string|number|undefined|null
 >;
 type ${BOBE_PREFIX}NativeProperties = ${BOBE_PREFIX}BooleanProps & ${BOBE_PREFIX}NumericProps;
+type ${BOBE_PREFIX}Mutable<T> = {
+  -readonly [P in keyof T]: T[P];
+};
+type ${BOBE_PREFIX}PropsOf<T> = T extends { defineProps?: infer P } ? NonNullable<P> : {};
+type ${BOBE_PREFIX}InlinePropsOf<T> = T extends { defineProps?: infer P } ? NonNullable<P> : NonNullable<T>;
+type ${BOBE_PREFIX}WithProps<T> = Omit<T, keyof ${BOBE_PREFIX}PropsOf<T>> & ${BOBE_PREFIX}PropsOf<T>;
 type ${BOBE_PREFIX}CreateTextOrComponent = {
-  <T>(a: {defineProps?: T} & Record<any, any>): T;
-  <T extends new (...args: any[]) =>any>(input: T): InstanceType<T>;
+  <T>(a: {defineProps?: T} & Record<any, any>): ${BOBE_PREFIX}Mutable<T>;
+  <T extends new (...args: any[]) =>any>(input: T): ${BOBE_PREFIX}Mutable<${BOBE_PREFIX}WithProps<InstanceType<T>>>;
+  <T extends (...args: any[]) =>any>(input: T): ${BOBE_PREFIX}Mutable<ReturnType<T>>;
   (input: any): Text;
 };
 let ${BOBE_PREFIX}_h!:<K extends keyof HTMLElementTagNameMap>(
   tag: K, 
   options?: ElementCreationOptions
-) => Omit<HTMLElementTagNameMap[K], keyof ${BOBE_PREFIX}NativeProperties |'textContent' > & { text: string|number|undefined|null } & ${BOBE_PREFIX}NativeProperties & Record<string, any>;
+) => Omit<HTMLElementTagNameMap[K], keyof ${BOBE_PREFIX}NativeProperties |'textContent' | 'children' > & { children: string|number|undefined|null } & ${BOBE_PREFIX}NativeProperties & Record<string, any>;
 let ${BOBE_PREFIX}_t!: ${BOBE_PREFIX}CreateTextOrComponent;
 `;
 
@@ -125,12 +145,12 @@ export class Bobe2ts {
             varName: string;
             templateSpan?: TemplateSpan;
           };
-          const key = prop.key.key;
+          const { propName } = this.normalizePropKey(prop);
           const inlineName = this.idg.name;
           this.idg.i++;
           prop.inlineName = inlineName;
           this.output += `let ${inlineName}=(`;
-          const rightBrace = `}: NonNullable<NonNullable<(typeof ${cmpInsName})['${key}']>['defineProps']>) => {\n`;
+          const rightBrace = `}: ${BOBE_PREFIX}Mutable<${BOBE_PREFIX}InlinePropsOf<NonNullable<(typeof ${cmpInsName})['${propName}']>>>) => {\n`;
 
           if (templateSpan && this.program) {
             const area = new Area();
@@ -138,7 +158,7 @@ export class Bobe2ts {
             const checker = this.program.getTypeChecker();
             const gotType = checker.getTypeAtLocation(templateSpan.expression);
 
-            const exec = new PropertyExtractor(checker, key, templateSpan.expression, this.c.tss);
+            const exec = new PropertyExtractor(checker, propName, templateSpan.expression, this.c.tss);
             const names = exec.extractPropertyNames(gotType);
             for (const name of names) {
               const start = this.output.length;
@@ -173,35 +193,23 @@ export class Bobe2ts {
         leave: node => {
           const varName = this.idg.name;
           this.idg.i++;
-          const name = node! as PropertyValue & { varName: string; templateSpan: TemplateSpan };
+          const name = node! as ComponentNameValue;
           name.varName = varName;
-          const source = name.loc!.source!;
-          const sourceName = source.replace(BRACE_REG, match => {
-            if (match.length === 1) return ' ';
-            return '  ';
-          });
-          this.output += `${this.dent.v}let ${varName}=${BOBE_PREFIX}_t(`;
-          const map = this.map(this.off(name), this.output.length, source.length);
-          this.output += `${sourceName});\n`;
-          if(name.type !== NodeType.StaticValue) {
-            return;
-          }
-          let ins: TemplateSpan | undefined;
-          while ((ins = this.nextInsExp()) != null) {
-            const insStart = ins.getFullStart();
-            if (insStart > map.originOffset) {
-              if (insStart < map.originOffset + map.length) {
-                name.templateSpan = ins;
-              }
-              break;
-            }
-          }
         }
       },
       parseComponentNode: {
+        nameAdded: node => {
+          const name = (node! as ComponentWithTypeArguments).componentName as ComponentNameValue;
+          this.recordTemplateSpan(name);
+        },
         propsAdded: node => {
-          const _node = node!;
-          const name = _node.componentName! as PropertyValue & { varName: string };
+          const _node = node! as ComponentWithTypeArguments;
+          const name = _node.componentName! as ComponentNameValue;
+          if (!_node.typeArguments?.length && this.createInferPropsExp(_node, name)) {
+            this.output += `\n`;
+            return;
+          }
+          this.createComponentExp(_node);
           this.createSetPropsExp(_node.props, name.varName);
           this.output += `\n`;
         }
@@ -256,20 +264,179 @@ export class Bobe2ts {
   off(n: { loc?: any }) {
     return n.loc!.start.offset - 1;
   }
+  createSourceName(source: string) {
+    return source.replace(BRACE_REG, match => {
+      if (match.length === 1) return ' ';
+      return '  ';
+    });
+  }
+  createComponentExp = (node: ComponentWithTypeArguments) => {
+    const name = node.componentName as ComponentNameValue;
+
+    this.output += `${this.dent.v}let ${name.varName}=`;
+    this.createComponentValueExp(node);
+    this.output += `;\n`;
+  };
+  createComponentReferenceExp = (node: ComponentWithTypeArguments) => {
+    this.output += `${this.dent.v}`;
+    this.createComponentValueExp(node);
+    this.output += `;\n`;
+  };
+  createComponentValueExp = (node: ComponentWithTypeArguments) => {
+    const name = node.componentName as ComponentNameValue;
+    const source = name.loc!.source!;
+    const sourceName = this.createSourceName(source);
+
+    this.output += `${BOBE_PREFIX}_t(`;
+    this.map(this.off(name), this.output.length, source.length);
+    this.output += sourceName;
+    this.createTypeArgumentsExp(node);
+    this.output += `)`;
+  };
+  createTypeArgumentsExp = (node: ComponentWithTypeArguments) => {
+    const typeArguments = node.typeArguments;
+    if (!typeArguments?.length) return;
+
+    this.output += '<';
+    typeArguments.forEach((arg, index) => {
+      if (index) this.output += ', ';
+      if (arg.loc) {
+        this.map(this.off(arg), this.output.length, arg.raw.length);
+      }
+      this.output += arg.raw;
+    });
+    this.output += '>';
+  };
+  recordTemplateSpan(name: ComponentNameValue) {
+    if (name.type !== NodeType.StaticValue) {
+      return;
+    }
+    const originOffset = this.templateStart + this.off(name);
+    const length = name.loc!.source!.length;
+    let ins: TemplateSpan | undefined;
+    while ((ins = this.nextInsExp()) != null) {
+      const insStart = ins.getFullStart();
+      if (insStart >= originOffset) {
+        if (insStart < originOffset + length) {
+          name.templateSpan = ins;
+        }
+        break;
+      }
+    }
+  }
+  createInferPropsExp = (node: ComponentWithTypeArguments, name: ComponentNameValue) => {
+    const info = this.getGenericComponentInfo(name);
+    if (!info || !node.props.length) return false;
+
+    const fnName = this.idg.name;
+    this.idg.i++;
+    const typeParamNames = info.typeParamNames.join(', ');
+    const instanceType = `InstanceType<typeof ${info.typeExpr}<${typeParamNames}>>`;
+
+    this.createComponentReferenceExp(node);
+    this.output += `${this.dent.v}let ${fnName}!:<${info.typeParamTexts.join(
+      ', '
+    )}>(props: `;
+    this.createPropsConstraintTypeExp(node.props, instanceType);
+    this.output += `) => ${BOBE_PREFIX}Mutable<${instanceType}>;\n`;
+    this.output += `${this.dent.v}let ${name.varName}=${fnName}(`;
+    this.createPropsObjectExp(node.props);
+    this.output += `);`;
+    return true;
+  };
+  getGenericComponentInfo(name: ComponentNameValue) {
+    if (!this.program || !name.templateSpan) return null;
+    const checker = this.program.getTypeChecker();
+    const tss = this.c.tss;
+    const expression = name.templateSpan.expression;
+    const componentType = checker.getTypeAtLocation(expression);
+
+    let symbol = checker.getSymbolAtLocation(expression) || componentType.getSymbol() || componentType.aliasSymbol;
+    if (symbol && symbol.flags & tss.SymbolFlags.Alias) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    const classDecl = symbol?.declarations?.find((decl: any) => {
+      return tss.isClassDeclaration(decl) || tss.isClassExpression(decl);
+    }) as ts.ClassDeclaration | ts.ClassExpression | undefined;
+    const typeParamTexts = classDecl?.typeParameters?.map(param => param.getText()) || [];
+    const typeParamNames = classDecl?.typeParameters?.map(param => param.name.getText()) || [];
+
+    if (!typeParamTexts.length || typeParamTexts.length !== typeParamNames.length) return null;
+    return {
+      typeExpr: expression.getText(),
+      typeParamTexts,
+      typeParamNames
+    };
+  }
+  createPropsConstraintTypeExp = (props: Property[], instanceType: string) => {
+    this.output += '{';
+    props.forEach((_prop, index) => {
+      if (index) this.output += ';';
+      const prop = _prop as Property & { inlineName: string };
+      const { key, propName, sourceKey, explicitKey } = this.normalizePropKey(prop);
+      if (sourceKey === explicitKey) {
+        this.map(this.off(prop.key), this.output.length, sourceKey.length);
+      }
+      this.output += `${key}:${instanceType}['`;
+      if (sourceKey === explicitKey && sourceKey === propName) {
+        this.map(this.off(prop.key), this.output.length, sourceKey.length);
+      }
+      this.output += `${propName}']`;
+    });
+    this.output += '}';
+  };
+  normalizePropKey(prop: Property) {
+    const loc = prop.key.loc!;
+    const sourceKey = loc.source;
+    const explicitKey = String(prop.key.key);
+    let key = explicitKey;
+    let replaceCount = 0;
+    key = key.replace(/\-(\w)/g, (_, match) => {
+      const res = match.toUpperCase();
+      replaceCount++;
+      return res;
+    });
+    const propName = key;
+    key = propName + new Array(replaceCount).fill(' ').join('');
+    return { key, propName, sourceKey, explicitKey };
+  }
+  createPropsObjectExp = (props: Property[]) => {
+    this.output += '{';
+    props.forEach((_prop, index) => {
+      if (index) this.output += ',';
+      const prop = _prop as Property & { inlineName: string };
+      const { key, sourceKey, explicitKey } = this.normalizePropKey(prop);
+      if (sourceKey === explicitKey) {
+        this.map(this.off(prop.key), this.output.length, sourceKey.length);
+      }
+      this.output += `${key}:`;
+      if (!prop.value) {
+        this.output += 'null';
+        return;
+      }
+      if (prop.inlineName) {
+        this.output += `${prop.inlineName} as any`;
+        return;
+      }
+
+      let { source: value } = prop.value.loc!;
+      if (prop.value.type === NodeType.DynamicValue) {
+        value = value.replace(BRACE_REG, ' ');
+      }
+
+      this.map(this.off(prop.value), this.output.length, value.length);
+      this.output += value;
+    });
+    this.output += '}';
+  };
   createSetPropsExp = (props: Property[], name: string) => {
     const nameDot = `${name}.`;
     props.forEach(_prop => {
       const prop = _prop as Property & { inlineName: string };
-      const loc = prop.key.loc!;
-      let { source: key } = loc;
-      this.map(this.off(prop.key), this.output.length + nameDot.length, key.length);
-      let replaceCount = 0;
-      key = key.replace(/\-(\w)/g, (_, match) => {
-        const res = match.toUpperCase();
-        replaceCount++;
-        return res;
-      });
-      key = key + new Array(replaceCount).fill(' ').join('');
+      const { key, sourceKey, explicitKey } = this.normalizePropKey(prop);
+      if (sourceKey === explicitKey) {
+        this.map(this.off(prop.key), this.output.length + nameDot.length, sourceKey.length);
+      }
       const assignLeft = `${nameDot}${key}=`;
       this.output += assignLeft;
       if (!prop.value) {

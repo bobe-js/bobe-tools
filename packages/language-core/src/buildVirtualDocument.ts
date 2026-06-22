@@ -106,7 +106,8 @@ function endClass(node: ts.Node) {
   if (c.builtHeadAreas) {
     c.builtHeadAreas = undefined;
     c.idg = undefined;
-    c.virtualCode += `}\n`;
+    c.virtualCode += c.builtHeadTail || `}\n`;
+    c.builtHeadTail = undefined;
   }
   return;
 }
@@ -121,9 +122,19 @@ function beginTemplate(node: ts.Node) {
     c.idg = new IdGenerator();
     const { currentClass } = c;
     const className = currentClass.name!.getText();
+    const typeParams = currentClass.typeParameters?.map(param => param.getText()) || [];
+    const typeParamNames = currentClass.typeParameters?.map(param => param.name.getText()) || [];
+    const headType = typeParamNames.length ? `${className}<${typeParamNames.join(', ')}>` : className;
 
     const area = new Area();
-    c.virtualCode += `{\nconst {`;
+    if (typeParams.length) {
+      c.virtualCode += `{\nfunction ${c.idg.h}<${typeParams.join(', ')}>(){\n`;
+      c.builtHeadTail = `}\n${c.idg.h}();\n}\n`;
+    } else {
+      c.virtualCode += `{\n`;
+      c.builtHeadTail = `}\n`;
+    }
+    c.virtualCode += `let {`;
     const members = getClassMembersInClass(currentClass, c.tss);
     for (const member of members) {
       const nameText = member.name!.getText();
@@ -132,7 +143,7 @@ function beginTemplate(node: ts.Node) {
       const itemEnd = c.virtualCode.length;
       area.addRange(itemStart, itemEnd);
     }
-    c.virtualCode += `} = {} as any as ${className};\n`;
+    c.virtualCode += `} = {} as any as ${headType};\n`;
     c.builtHeadAreas = template.headAreas = [area];
   }
   c.virtualCode += '{\n';
@@ -147,7 +158,7 @@ function beginTemplate(node: ts.Node) {
       const propNodes = checker.getPropertiesOfType(typeNode);
       /*----------------- 增加类型解构 -----------------*/
       const area = new Area();
-      c.virtualCode += `const {`;
+      c.virtualCode += `let {`;
       for (const { name } of propNodes) {
         const itemStart = c.virtualCode.length;
         c.virtualCode += `${name}:${name},`;

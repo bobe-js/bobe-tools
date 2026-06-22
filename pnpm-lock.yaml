@@ -18,11 +18,11 @@ importers:
         specifier: ^25.5.2
         version: 25.5.2
       bobe:
-        specifier: ^0.0.72
-        version: 0.0.72
+        specifier: ^0.0.74
+        version: 0.0.74
       bobe-shared:
-        specifier: ^0.0.70
-        version: 0.0.70
+        specifier: ^0.0.74
+        version: 0.0.74
       rollup:
         specifier: ^4.60.1
         version: 4.60.1
@@ -45,14 +45,14 @@ importers:
         specifier: workspace:*
         version: link:../language-core
       aoye:
-        specifier: ^0.0.73
-        version: 0.0.73
+        specifier: ^0.0.74
+        version: 0.0.74
       bobe:
-        specifier: ^0.0.73
-        version: 0.0.73
+        specifier: ^0.0.74
+        version: 0.0.74
       bobe-dom:
-        specifier: ^0.0.73
-        version: 0.0.73
+        specifier: ^0.0.74
+        version: 0.0.74
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
@@ -66,8 +66,8 @@ importers:
   packages/language-core:
     dependencies:
       bobe:
-        specifier: ^0.0.73
-        version: 0.0.73
+        specifier: ^0.0.74
+        version: 0.0.74
 
   packages/ts-service-plugin:
     dependencies:
@@ -613,11 +613,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  aoye@0.0.72:
-    resolution: {integrity: sha512-/+1PiInq37mqGYCFQGm8VgDCtjIIMpilTnKRRtevMYB3nDJJaIq/RVY9dAmAVOLP4/o6dO3tQ330GAidptJKUg==}
-
-  aoye@0.0.73:
-    resolution: {integrity: sha512-TfU+vcWQ40Up6ltAvWir5xTgX98icgQpsfmsIRISLnxlYo5bHFzh9V6m8cLjHZCq/qML2v74unoIztXUf4r1cA==}
+  aoye@0.0.74:
+    resolution: {integrity: sha512-+vF0kDWOQ8B5XcneD73br+oY4g/IPZzpt4GBHr6CC6bZgaOcZ2OoWGimpmOipAJ7KT+TCpB17jp3/k0UvkYjzg==}
 
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
@@ -625,23 +622,14 @@ packages:
   argparse@1.0.10:
     resolution: {integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==}
 
-  bobe-dom@0.0.73:
-    resolution: {integrity: sha512-Ti1Yi8G8vG7kE0lTQjyjaF59nsT3Wqrb7aM6lUz3b8i661JflkWxBpmfOsxpzgDscOZrOnA+yzaIoYF9D7Wm3w==}
+  bobe-dom@0.0.74:
+    resolution: {integrity: sha512-9og7Qa0DVfAqDFRKPOblfbZnzKMze2wd3xcBu5nrua7+bhUw0q4ozS9tUbtMRtqhH+pdI1zLPPdj/Yp8IfTegw==}
 
-  bobe-shared@0.0.70:
-    resolution: {integrity: sha512-ja2j1CarBXNkmVSra/LrdJ+DWHe7PpEOf+a4T7Hbo80ZK4N1cqU4akEpPPp2e5i4R+qGYEo0WE/TupsaKQah/g==}
+  bobe-shared@0.0.74:
+    resolution: {integrity: sha512-ku3HcOWxDeQLVkxLrPCeJietwcrBxRc2fHAkoawAbY1j9iii0KtW8qy9hLGEfzrY0v118xUz+0o7cpbnvDH3uQ==}
 
-  bobe-shared@0.0.72:
-    resolution: {integrity: sha512-IY6ymEIq7ZDCa7mwexMj1vn2UQ3/7YlqLsnUjq9joOX9AljhjVdWmDUK+g5vll/boF0DdotDOwmZVRmHRJ7NUg==}
-
-  bobe-shared@0.0.73:
-    resolution: {integrity: sha512-nahb+1qFXre0QXAELksy8kM6qW2GrnP4iscnR4YZmPKn9CRiZ/wWM4EB3uoMECBGo8xIx8XjZXItx4ZC2CFxgw==}
-
-  bobe@0.0.72:
-    resolution: {integrity: sha512-Gc9Wd5T57foa0meN5rtbyqqEfTL/TlGLCjk8Y1lIlItkgG7ClCFUzbBPD0V3ExME/cIZM67VnG424NwPSKgTxQ==}
-
-  bobe@0.0.73:
-    resolution: {integrity: sha512-7RfQkXnfjgOLMklsrnP49aeK8GvsOShdmQv5b/+/V5SNzFZDYwV7CL9ARIswpWThPkY+GhEsrWo9VNtVnybvkw==}
+  bobe@0.0.74:
+    resolution: {integrity: sha512-GwExInyRkBmQzOl49V6q+vtTx/xJM48izAqkUjMgO+x6zSf1cnjk/4mzR9qHVh6dP03U6kC2FKYAdz1NefQLGw==}
 
   commondir@1.0.1:
     resolution: {integrity: sha512-W9pAhw0ja1Edb5GVdIF1mjZw/ASI0AlShXM83UUGe2DVr5TdAPEA1OA8m/g8zWp9x6On7gqufY+FatDbC3MDQg==}
@@ -1397,13 +1385,9 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  aoye@0.0.72:
+  aoye@0.0.74:
     dependencies:
-      bobe-shared: 0.0.72
-
-  aoye@0.0.73:
-    dependencies:
-      bobe-shared: 0.0.73
+      bobe-shared: 0.0.74
 
   arg@4.1.3: {}
 
@@ -1411,32 +1395,23 @@ snapshots:
     dependencies:
       sprintf-js: 1.0.3
 
-  bobe-dom@0.0.73:
+  bobe-dom@0.0.74:
     dependencies:
       '@babel/parser': 8.0.0
       '@iconify/utils': 3.1.3
-      bobe: 0.0.73
+      bobe: 0.0.74
       gray-matter: 4.0.3
       highlight.js: 11.11.1
       htmlparser2: 12.0.0
       iconify-icon: 3.0.2
       marked: 18.0.5
 
-  bobe-shared@0.0.70: {}
+  bobe-shared@0.0.74: {}
 
-  bobe-shared@0.0.72: {}
-
-  bobe-shared@0.0.73: {}
-
-  bobe@0.0.72:
+  bobe@0.0.74:
     dependencies:
-      aoye: 0.0.72
-      bobe-shared: 0.0.72
-
-  bobe@0.0.73:
-    dependencies:
-      aoye: 0.0.73
-      bobe-shared: 0.0.73
+      aoye: 0.0.74
+      bobe-shared: 0.0.74
 
   commondir@1.0.1: {}
 

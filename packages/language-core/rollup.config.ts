@@ -13,6 +13,11 @@ const __dirname = path.dirname(__filename);
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, './package.json')));
 
 const external = [/^typescript/, 'bobe', 'bobe/compiler'];
+const isProduction = process.env.NODE_ENV ? process.env.NODE_ENV === 'production' : !process.env.ROLLUP_WATCH;
+const define = {
+  __BOBE_LANG_CORE_PRODUCTION__: isProduction ? 'true' : 'false',
+  'process.env.NODE_ENV': JSON.stringify(isProduction ? 'production' : 'development')
+};
 
 export default [
   {
@@ -24,7 +29,7 @@ export default [
     plugins: [
       nodeResolve({ extensions: ['.ts', '.js', '.json', '.node'] }),
       commonjs(),
-      esbuild({ target: 'es2020', tsconfig: path.resolve(__dirname, 'tsconfig.json') })
+      esbuild({ target: 'es2020', tsconfig: path.resolve(__dirname, 'tsconfig.json'), define })
     ],
     external
   },

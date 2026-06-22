@@ -165,7 +165,7 @@ export function sfHasBobeTemplate(sf: ts.SourceFile, tss: typeof ts) {
   return hasBobe;
 }
 
-export const strHasBobeTemplate = (str: string) => str.match(/bobe(?:\\s*(<)([^`]*)(>))?`/);
+export const strHasBobeTemplate = (str: string) => str.match(/\bbobe(?:\s*<[^`]*>)?\s*`/);
 
 /** 获取当前节点最近的类名 */
 export function findPrecedingClassNode(
@@ -426,7 +426,12 @@ export const domPropertyExp = /^[a-zA-Z][\w-]*$/;
 export const AND = `__BOBE_AND_${Date.now().toString(36)}__`;
 
 export function isClassProp(node: ts.Node, tss: typeof ts) {
-  return tss.isPropertyDeclaration(node) || (tss.isMethodDeclaration(node) && tss.isIdentifier(node.name));
+  return (
+    tss.isPropertyDeclaration(node) ||
+    tss.isGetAccessorDeclaration(node) ||
+    tss.isSetAccessorDeclaration(node) ||
+    (tss.isMethodDeclaration(node) && tss.isIdentifier(node.name))
+  );
 }
 
 export function isClass(node: ts.Node, tss: typeof ts) {

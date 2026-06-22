@@ -51,12 +51,26 @@
     "tags": {
       "patterns": [
         {
+          "comment": "匹配模板内容起始处的标签名",
+          "begin": "\\G\\s*([a-z0-9]+)(?=\\s|$|\\s+[a-zA-Z])",
+          "beginCaptures": {
+            "1": { "name": "variable.object.property.bobe" }
+          },
+          "end": "(?=$|`)",
+          "patterns": [
+            { "include": "#attributes" },
+            { "include": "#expressions" },
+            { "include": "#strings" },
+            { "include": "#single-quoted-string" }
+          ]
+        },
+        {
           "comment": "匹配行首或空格后的标签名",
           "begin": "(?<=^|\\s)([a-z0-9]+)(?=\\s|$|\\s+[a-zA-Z])",
           "beginCaptures": {
             "1": { "name": "variable.object.property.bobe" }
           },
-          "end": "(?=$)",
+          "end": "(?=$|`)",
           "patterns": [
             { "include": "#attributes" },
             { "include": "#expressions" },
@@ -86,12 +100,47 @@
           ]
         },
         {
+          "comment": "匹配组件名后的泛型参数",
+          "begin": "(?<=\\})(<)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.typeparameters.begin.ts" }
+          },
+          "end": "(>)",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.typeparameters.end.ts" }
+          },
+          "name": "meta.type.parameters.bobe",
+          "patterns": [
+            { "include": "#component-type-arguments" },
+            { "include": "source.ts" }
+          ]
+        },
+        {
           "comment": "紧跟在组件后的属性匹配",
           "match": "([a-zA-Z\\-0-9@]+)(=)",
           "captures": {
             "1": { "name": "entity.other.attribute-name.bobe" },
             "2": { "name": "keyword.operator.assignment.bobe" }
           }
+        }
+      ]
+    },
+    "component-type-arguments": {
+      "patterns": [
+        {
+          "begin": "(<)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.typeparameters.begin.ts" }
+          },
+          "end": "(>)",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.typeparameters.end.ts" }
+          },
+          "name": "meta.type.parameters.bobe",
+          "patterns": [
+            { "include": "#component-type-arguments" },
+            { "include": "source.ts" }
+          ]
         }
       ]
     },

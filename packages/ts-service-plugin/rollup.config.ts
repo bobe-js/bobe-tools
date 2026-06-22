@@ -12,6 +12,11 @@ const __dirname = path.dirname(__filename);
 
 // @ts-ignore
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, './package.json')));
+const isProduction = process.env.NODE_ENV ? process.env.NODE_ENV === 'production' : !process.env.ROLLUP_WATCH;
+const define = {
+  __BOBE_LANG_CORE_PRODUCTION__: isProduction ? 'true' : 'false',
+  'process.env.NODE_ENV': JSON.stringify(isProduction ? 'production' : 'development')
+};
 export default [
   {
     input: 'src/index.ts',
@@ -21,7 +26,8 @@ export default [
       commonjs(),
       esbuild({
         target: 'node14',
-        tsconfig: path.resolve(__dirname, 'tsconfig.json')
+        tsconfig: path.resolve(__dirname, 'tsconfig.json'),
+        define
       })
     ],
     external: [/^typescript/]

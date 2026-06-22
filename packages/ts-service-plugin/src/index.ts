@@ -15,9 +15,11 @@ import {
   AND,
   calcAbsSourceMap,
   fixTextSpan,
+  findTemplateTypePos,
   inVirtualPart,
   strHasBobeTemplate,
-  inWitchVirtualPart
+  inWitchVirtualPart,
+  uniqBy
 } from '@bobe-js/lang-core';
 import { buildVirtualDocument, type VirtualDocumentResult } from '@bobe-js/lang-core';
 
@@ -64,7 +66,7 @@ export default (modules: { typescript: typeof ts }) => {
               const snapshot = lsh.getScriptSnapshot(it);
               if (!snapshot) return false;
               const content = snapshot.getText(0, snapshot.getLength());
-              return content.includes('bobe`');
+              return Boolean(strHasBobeTemplate(content));
             })
             .map(getVirtualName);
           logger.info(`被加入的虚拟文件: ${JSON.stringify(virtualFileNames, undefined, 2)}`);
@@ -113,6 +115,40 @@ export default (modules: { typescript: typeof ts }) => {
 
       const templateService = new BobeTemplateService(tss, wrappedLangService, info.project, getVirtualResult, info);
 
+      const normalizeVirtualDefinition = (
+        definition: ts.ReferencedSymbolDefinitionInfo
+      ): ts.ReferencedSymbolDefinitionInfo | undefined => {
+        if (!isVirtualFile(definition.fileName)) return definition;
+        const realName = getRealName(definition.fileName);
+        const { code, sf: realSf, templates } = getVirtualResult(definition.fileName);
+        if (!realSf) return undefined;
+        let textSpan = definition.textSpan;
+        if (inVirtualPart(realSf, textSpan)) {
+          const map = calcAbsSourceMap(textSpan.start, templates, true);
+          if (!map) return undefined;
+          textSpan = fixTextSpan(textSpan, code, map);
+        }
+        return { ...definition, fileName: realName, textSpan };
+      };
+
+      const mergeReferencedSymbols = (symbols: ts.ReferencedSymbol[]) => {
+        const merged = new Map<string, ts.ReferencedSymbol>();
+        for (const symbol of symbols) {
+          const key = `${symbol.definition.fileName}::${symbol.definition.textSpan.start}::${symbol.definition.textSpan.length}`;
+          const existing = merged.get(key);
+          const references = uniqBy(
+            [...(existing?.references || []), ...symbol.references],
+            ref => `${ref.fileName}::${ref.textSpan.start}::${ref.textSpan.length}`
+          );
+          if (existing) {
+            existing.references = references;
+          } else {
+            merged.set(key, { ...symbol, references });
+          }
+        }
+        return Array.from(merged.values());
+      };
+
       // ---- 自己实现 language service 拦截逻辑 ----
 
       // 代理原始 info.languageService，拦截模板相关方法
@@ -157,12 +193,17 @@ export default (modules: { typescript: typeof ts }) => {
               if (!snapshot) return target.findReferences(fileName, position);
               const content = snapshot.getText(0, snapshot.getLength());
               const hasBobeTemplate = strHasBobeTemplate(content);
+              const inTemplate = getPosTemplateCtx(info, tss, fileName, position);
+              const inTemplateType =
+                hasBobeTemplate && findTemplateTypePos(getVirtualResult(getVirtualName(fileName)).templates, position);
 
-              /*----------------- 无 bobe 模板语法的文件 -----------------*/
-              if (!hasBobeTemplate) {
+              /*----------------- 不在 bobe 模板内部的普通 TS 位置 -----------------*/
+              if (!inTemplate && !inTemplateType) {
                 const refSymbols = wrappedLangService.findReferences(fileName, position);
-                const newRefSymbols = refSymbols?.map(it => {
-                  const newRefs: ts.ReferenceEntry[] = [];
+                const newRefSymbols: ts.ReferencedSymbol[] | undefined = refSymbols?.flatMap(it => {
+                  const definition = normalizeVirtualDefinition(it.definition);
+                  if (!definition) return [];
+                  const newRefs: ts.ReferencedSymbolEntry[] = [];
                   it.references.forEach(({ fileName, textSpan, ...ref }) => {
                     if (isVirtualFile(fileName)) {
                       const realName = getRealName(fileName);
@@ -202,12 +243,16 @@ export default (modules: { typescript: typeof ts }) => {
                       textSpan
                     });
                   });
-                  return {
+                  return [{
                     ...it,
-                    references: newRefs
-                  };
+                    definition,
+                    references: uniqBy(
+                      newRefs,
+                      ref => `${ref.fileName}::${ref.textSpan.start}::${ref.textSpan.length}`
+                    )
+                  }];
                 });
-                return newRefSymbols;
+                return newRefSymbols ? mergeReferencedSymbols(newRefSymbols) : undefined;
               }
               return templateService.findReferences(fileName, position);
             };
@@ -229,9 +274,12 @@ export default (modules: { typescript: typeof ts }) => {
                 return target.findRenameLocations(fileName, position, findInStrings, findInComments, preferences);
               const content = snapshot.getText(0, snapshot.getLength());
               const hasBobeTemplate = strHasBobeTemplate(content);
+              const inTemplate = getPosTemplateCtx(info, tss, fileName, position);
+              const inTemplateType =
+                hasBobeTemplate && findTemplateTypePos(getVirtualResult(getVirtualName(fileName)).templates, position);
 
-              /*----------------- 无 bobe 模板语法的文件 -----------------*/
-              if (!hasBobeTemplate) {
+              /*----------------- 不在 bobe 模板内部的普通 TS 位置 -----------------*/
+              if (!inTemplate && !inTemplateType) {
                 const renameLocations = wrappedLangService.findRenameLocations(
                   fileName,
                   position,
@@ -283,7 +331,10 @@ export default (modules: { typescript: typeof ts }) => {
                     textSpan
                   });
                 });
-                return newRenameLocations;
+                return uniqBy(
+                  newRenameLocations,
+                  location => `${location.fileName}::${location.textSpan.start}::${location.textSpan.length}`
+                );
               }
               return templateService.findRenameLocations(
                 fileName,
