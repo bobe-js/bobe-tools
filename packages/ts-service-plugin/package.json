@@ -1,7 +1,7 @@
 {
   "name": "bobe-ts-service-plugin",
   "description": "Internal TypeScript server plugin for the Bobe VSCode extension.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "dist/bobe-ts-service-plugin.cjs.js",
   "types": "dist/index.d.ts",
   "scripts": {
