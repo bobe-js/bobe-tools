@@ -1,6 +1,6 @@
 {
   "scopeName": "inline.bobe",
-  "injectionSelector": "L:source.ts, L:source.tsx, L:source.js, L:source.jsx, L:source.js.jsx, L:string.template.ts, L:string.template.tsx, L:string.template.js, L:string.template.jsx, L:source.vue, L:text.html.basic, L:text.html.vue, L:text.html.derivative, L:source.svelte",
+  "injectionSelector": "L:source.ts -comment, L:source.tsx -comment, L:source.js -comment, L:source.jsx -comment, L:source.js.jsx -comment, L:string.template.ts, L:string.template.tsx, L:string.template.js, L:string.template.jsx, L:source.vue -comment, L:text.html.basic -comment, L:text.html.vue -comment, L:text.html.derivative -comment, L:source.svelte -comment",
   "patterns": [
     {
       "name": "meta.embedded.inline.bobe",

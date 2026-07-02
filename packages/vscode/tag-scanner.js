@@ -10,10 +10,11 @@ function collectBobeTagRanges(text, options = {}) {
 
 function collectTaggedTemplateTagRanges(text) {
   const ranges = [];
+  const commentRanges = collectJsCommentRanges(text);
   let searchStart = 0;
 
   while (searchStart < text.length) {
-    const bobeIndex = findBobeIdentifier(text, searchStart);
+    const bobeIndex = findBobeIdentifier(text, searchStart, commentRanges);
     if (bobeIndex === -1) break;
 
     const templateStart = findBobeTemplateStart(text, bobeIndex + 4);
@@ -69,11 +70,90 @@ function findLineTag(text, lineStart, lineEnd) {
   return { start, length: tag.length, text: tag };
 }
 
-function findBobeIdentifier(text, start) {
+function findBobeIdentifier(text, start, commentRanges = []) {
   const matcher = /\bbobe\b/g;
   matcher.lastIndex = start;
-  const match = matcher.exec(text);
-  return match ? match.index : -1;
+  let match = matcher.exec(text);
+  while (match) {
+    if (!isOffsetInRanges(match.index, commentRanges)) return match.index;
+    match = matcher.exec(text);
+  }
+  return -1;
+}
+
+function collectJsCommentRanges(text) {
+  const ranges = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const char = text[cursor];
+    const next = text[cursor + 1];
+
+    if (char === '/' && next === '/') {
+      const start = cursor;
+      cursor += 2;
+      while (cursor < text.length && text[cursor] !== '\n' && text[cursor] !== '\r') {
+        cursor += 1;
+      }
+      ranges.push({ start, end: cursor });
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      const start = cursor;
+      cursor += 2;
+      while (cursor < text.length && !(text[cursor] === '*' && text[cursor + 1] === '/')) {
+        cursor += 1;
+      }
+      ranges.push({ start, end: Math.min(text.length, cursor + 2) });
+      cursor += 2;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      cursor = skipQuotedString(text, cursor, char);
+      continue;
+    }
+
+    if (char === '`') {
+      cursor = skipTemplateString(text, cursor);
+      continue;
+    }
+
+    cursor += 1;
+  }
+
+  return ranges;
+}
+
+function skipQuotedString(text, start, quote) {
+  let cursor = start + 1;
+  while (cursor < text.length) {
+    if (text[cursor] === '\\') {
+      cursor += 2;
+      continue;
+    }
+    if (text[cursor] === quote) return cursor + 1;
+    cursor += 1;
+  }
+  return cursor;
+}
+
+function skipTemplateString(text, start) {
+  let cursor = start + 1;
+  while (cursor < text.length) {
+    if (text[cursor] === '\\') {
+      cursor += 2;
+      continue;
+    }
+    if (text[cursor] === '`') return cursor + 1;
+    cursor += 1;
+  }
+  return cursor;
+}
+
+function isOffsetInRanges(offset, ranges) {
+  return ranges.some(range => offset >= range.start && offset < range.end);
 }
 
 function findBobeTemplateStart(text, afterIdentifier) {
