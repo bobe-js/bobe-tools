@@ -231,7 +231,7 @@ function dirname(path: string) {
 }
 
 function hasBobeTemplate(source: string) {
-  return /\bbobe(?:\s*<[^`]*>)?`/.test(source);
+  return /\bbobe(?:\s*<[^`]*>\s*)?`/.test(source);
 }
 
 const DEFAULT_LIB = `

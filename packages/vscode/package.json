@@ -14,7 +14,316 @@
     "build": "echo 'success'"
   },
   "publisher": "smooth-cat",
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact",
+    "onLanguage:bobe"
+  ],
   "contributes": {
+    "semanticTokenTypes": [
+      {
+        "id": "bobeTagNamespace",
+        "superType": "namespace",
+        "description": "Bobe tag colored like namespaces."
+      },
+      {
+        "id": "bobeTagType",
+        "superType": "type",
+        "description": "Bobe tag colored like types."
+      },
+      {
+        "id": "bobeTagClass",
+        "superType": "class",
+        "description": "Bobe tag colored like classes."
+      },
+      {
+        "id": "bobeTagEnum",
+        "superType": "enum",
+        "description": "Bobe tag colored like enums."
+      },
+      {
+        "id": "bobeTagInterface",
+        "superType": "interface",
+        "description": "Bobe tag colored like interfaces."
+      },
+      {
+        "id": "bobeTagStruct",
+        "superType": "struct",
+        "description": "Bobe tag colored like structs."
+      },
+      {
+        "id": "bobeTagTypeParameter",
+        "superType": "typeParameter",
+        "description": "Bobe tag colored like type parameters."
+      },
+      {
+        "id": "bobeTagParameter",
+        "superType": "parameter",
+        "description": "Bobe tag colored like parameters."
+      },
+      {
+        "id": "bobeTagVariable",
+        "superType": "variable",
+        "description": "Bobe tag colored like variables."
+      },
+      {
+        "id": "bobeTagProperty",
+        "superType": "property",
+        "description": "Bobe tag colored like object property names."
+      },
+      {
+        "id": "bobeTagEnumMember",
+        "superType": "enumMember",
+        "description": "Bobe tag colored like enum members."
+      },
+      {
+        "id": "bobeTagEvent",
+        "superType": "event",
+        "description": "Bobe tag colored like events."
+      },
+      {
+        "id": "bobeTagFunction",
+        "superType": "function",
+        "description": "Bobe tag colored like functions."
+      },
+      {
+        "id": "bobeTagMethod",
+        "superType": "method",
+        "description": "Bobe tag colored like methods."
+      },
+      {
+        "id": "bobeTagMacro",
+        "superType": "macro",
+        "description": "Bobe tag colored like macros."
+      },
+      {
+        "id": "bobeTagKeyword",
+        "superType": "keyword",
+        "description": "Bobe tag colored like keywords."
+      },
+      {
+        "id": "bobeTagModifier",
+        "superType": "modifier",
+        "description": "Bobe tag colored like modifiers."
+      },
+      {
+        "id": "bobeTagComment",
+        "superType": "comment",
+        "description": "Bobe tag colored like comments."
+      },
+      {
+        "id": "bobeTagString",
+        "superType": "string",
+        "description": "Bobe tag colored like strings."
+      },
+      {
+        "id": "bobeTagNumber",
+        "superType": "number",
+        "description": "Bobe tag colored like numbers."
+      },
+      {
+        "id": "bobeTagRegexp",
+        "superType": "regexp",
+        "description": "Bobe tag colored like regular expressions."
+      },
+      {
+        "id": "bobeTagOperator",
+        "superType": "operator",
+        "description": "Bobe tag colored like operators."
+      },
+      {
+        "id": "bobeTagDecorator",
+        "superType": "decorator",
+        "description": "Bobe tag colored like decorators."
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "bobeTagNamespace": [
+            "entity.name.namespace"
+          ],
+          "bobeTagType": [
+            "entity.name.type",
+            "support.type"
+          ],
+          "bobeTagClass": [
+            "entity.name.type.class",
+            "support.class"
+          ],
+          "bobeTagEnum": [
+            "entity.name.type.enum"
+          ],
+          "bobeTagInterface": [
+            "entity.name.type.interface"
+          ],
+          "bobeTagStruct": [
+            "entity.name.type.struct",
+            "storage.type.struct"
+          ],
+          "bobeTagTypeParameter": [
+            "entity.name.type.parameter"
+          ],
+          "bobeTagParameter": [
+            "variable.parameter"
+          ],
+          "bobeTagVariable": [
+            "variable.other.readwrite",
+            "variable.other"
+          ],
+          "bobeTagProperty": [
+            "variable.other.property",
+            "meta.object-literal.key"
+          ],
+          "bobeTagEnumMember": [
+            "variable.other.enummember",
+            "constant.other.enum"
+          ],
+          "bobeTagEvent": [
+            "variable.other.event"
+          ],
+          "bobeTagFunction": [
+            "entity.name.function"
+          ],
+          "bobeTagMethod": [
+            "entity.name.function.member",
+            "support.function"
+          ],
+          "bobeTagMacro": [
+            "entity.name.function.preprocessor",
+            "support.function.macro"
+          ],
+          "bobeTagKeyword": [
+            "keyword"
+          ],
+          "bobeTagModifier": [
+            "storage.modifier"
+          ],
+          "bobeTagComment": [
+            "comment"
+          ],
+          "bobeTagString": [
+            "string"
+          ],
+          "bobeTagNumber": [
+            "constant.numeric"
+          ],
+          "bobeTagRegexp": [
+            "string.regexp"
+          ],
+          "bobeTagOperator": [
+            "keyword.operator"
+          ],
+          "bobeTagDecorator": [
+            "entity.name.function.decorator",
+            "meta.decorator"
+          ]
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Bobe",
+      "properties": {
+        "bobe.syntax.tagTokenType": {
+          "type": "string",
+          "default": "property",
+          "enum": [
+            "none",
+            "namespace",
+            "type",
+            "class",
+            "enum",
+            "interface",
+            "struct",
+            "typeParameter",
+            "parameter",
+            "variable",
+            "property",
+            "enumMember",
+            "event",
+            "function",
+            "method",
+            "macro",
+            "keyword",
+            "modifier",
+            "comment",
+            "string",
+            "number",
+            "regexp",
+            "operator",
+            "decorator"
+          ],
+          "enumDescriptions": [
+            "Do not add semantic tokens. Bobe tags use TextMate highlighting only.",
+            "Color Bobe tags like namespaces.",
+            "Color Bobe tags like types.",
+            "Color Bobe tags like classes.",
+            "Color Bobe tags like enums.",
+            "Color Bobe tags like interfaces.",
+            "Color Bobe tags like structs.",
+            "Color Bobe tags like type parameters.",
+            "Color Bobe tags like parameters.",
+            "Color Bobe tags like variables.",
+            "Color Bobe tags like object property names.",
+            "Color Bobe tags like enum members.",
+            "Color Bobe tags like events.",
+            "Color Bobe tags like functions.",
+            "Color Bobe tags like methods.",
+            "Color Bobe tags like macros.",
+            "Color Bobe tags like keywords.",
+            "Color Bobe tags like modifiers.",
+            "Color Bobe tags like comments.",
+            "Color Bobe tags like strings.",
+            "Color Bobe tags like numbers.",
+            "Color Bobe tags like regular expressions.",
+            "Color Bobe tags like operators.",
+            "Color Bobe tags like decorators."
+          ],
+          "markdownDescription": "Semantic token type used for Bobe tag names. Use `none` to rely on TextMate highlighting only. Any selected type follows the active color theme instead of using a fixed foreground color.\n\nTip: run `Developer: Inspect Editor Tokens and Scopes` from the Command Palette, click the text whose color you want to match, then copy its semantic token type here. If the inspector shows a selector such as `property.declaration`, set this option to `property` and set `Bobe › Syntax: Tag Token Modifier` to `declaration`."
+        },
+        "bobe.syntax.tagTokenModifier": {
+          "type": "string",
+          "default": "declaration",
+          "enum": [
+            "none",
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "abstract",
+            "async",
+            "modification",
+            "documentation",
+            "defaultLibrary"
+          ],
+          "enumDescriptions": [
+            "Do not add a semantic token modifier.",
+            "Color Bobe tags like declarations, for example `property.declaration`.",
+            "Color Bobe tags like definitions.",
+            "Color Bobe tags like readonly symbols.",
+            "Color Bobe tags like static symbols.",
+            "Color Bobe tags like deprecated symbols.",
+            "Color Bobe tags like abstract symbols.",
+            "Color Bobe tags like async symbols.",
+            "Color Bobe tags like modified symbols.",
+            "Color Bobe tags like documentation symbols.",
+            "Color Bobe tags like default library symbols."
+          ],
+          "markdownDescription": "Semantic token modifier used for Bobe tag names. This only applies when `#bobe.syntax.tagTokenType#` is not `none`. Use `declaration` with `property` to match selectors like `semanticTokenColors.property.declaration.foreground`.\n\nTip: run `Developer: Inspect Editor Tokens and Scopes` from the Command Palette and check the semantic token selector for the text whose color you want to match. For `property.declaration`, this option should be `declaration`; for plain `property`, use `none`."
+        },
+        "bobe.syntax.tagColor": {
+          "type": "string",
+          "default": "",
+          "format": "color",
+          "pattern": "^$|^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "markdownDescription": "Optional fixed foreground color for Bobe tag names. Leave empty to follow the active theme via `#bobe.syntax.tagTokenType#`."
+        }
+      }
+    },
     "typescriptServerPlugins": [
       {
         "name": "bobe-ts-service-plugin",
@@ -51,6 +360,7 @@
           "source.js",
           "source.tsx",
           "source.jsx",
+          "source.js.jsx",
           "source.svelte",
           "source.vue",
           "text.html.basic",

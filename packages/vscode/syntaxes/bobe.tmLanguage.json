@@ -19,7 +19,7 @@
       "patterns": [
         {
           "comment": "匹配 if 后面的内容直到行尾，内部识别为 JS",
-          "begin": "\\b(if|else)\\b",
+          "begin": "\\b(if|else|fail)\\b",
           "beginCaptures": {
             "1": { "name": "keyword.control.bobe" }
           },
@@ -45,6 +45,13 @@
               "patterns": [{ "include": "source.js" }]
             }
           ]
+        },
+        {
+          "comment": "匹配模板内的 tp/context 关键字",
+          "match": "\\b(tp|context)\\b",
+          "captures": {
+            "1": { "name": "keyword.control.bobe" }
+          }
         }
       ]
     },
@@ -52,9 +59,9 @@
       "patterns": [
         {
           "comment": "匹配模板内容起始处的标签名",
-          "begin": "\\G\\s*([a-z0-9]+)(?=\\s|$|\\s+[a-zA-Z])",
+          "begin": "\\G\\s*(?!(?:if|else|fail|for|tp|context)\\b)([a-z][\\w-]*(?:-[a-z][\\w-]*)*)(?=\\s|$)",
           "beginCaptures": {
-            "1": { "name": "variable.object.property.bobe" }
+            "1": { "name": "meta.object-literal.key.bobe" }
           },
           "end": "(?=$|`)",
           "patterns": [
@@ -66,9 +73,9 @@
         },
         {
           "comment": "匹配行首或空格后的标签名",
-          "begin": "(?<=^|\\s)([a-z0-9]+)(?=\\s|$|\\s+[a-zA-Z])",
+          "begin": "(^|\\s)(?!(?:if|else|fail|for|tp|context)\\b)([a-z][\\w-]*(?:-[a-z][\\w-]*)*)(?=\\s|$)",
           "beginCaptures": {
-            "1": { "name": "variable.object.property.bobe" }
+            "2": { "name": "meta.object-literal.key.bobe" }
           },
           "end": "(?=$|`)",
           "patterns": [

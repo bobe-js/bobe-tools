@@ -43,7 +43,7 @@ function createBobeTsTokenizer() {
     ],
     tokenizer: {
       root: [
-        [/\bbobe(?=\s*(<[^`]*>)?`)/, { token: 'keyword', next: '@bobeTag' }],
+        [/\bbobe(?=\s*(<[^`]*>\s*)?`)/, { token: 'keyword', next: '@bobeTag' }],
         [/\/\/.*$/, 'comment'],
         [/\/\*/, 'comment', '@comment'],
         [/"([^"\\]|\\.)*$/, 'string.invalid'],
