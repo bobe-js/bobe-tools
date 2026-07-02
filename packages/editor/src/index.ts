@@ -14,7 +14,7 @@ export * from './syntax';
 export * from './types';
 export * from './vfs';
 
-const DEFAULT_ENTRY = '/src/main.ts';
+const DEFAULT_ENTRY = 'src/main.ts';
 
 export class BobeEditor extends Store implements BobeEditorInstance {
   static [StoreIgnoreKeys] = [
@@ -32,12 +32,15 @@ export class BobeEditor extends Store implements BobeEditorInstance {
     'logId'
   ];
 
+  consoleBottom : HTMLElement | null = null;
   domRef: HTMLElement | null = null;
-  vfs = new VirtualFileSystem(defaultFiles());
-  files: EditorFile[] = this.vfs.files;
-  selectedPath = DEFAULT_ENTRY;
+  vfs = new VirtualFileSystem();
+  files: EditorFile[] = [];
+  selectedPath = normalizePath(DEFAULT_ENTRY);
   entry = DEFAULT_ENTRY;
   initialPath?: string;
+  initialDirectory?: string;
+  rootDir?: string;
   logs: DebugLogEntry[] = [];
   diagnostics: EditorDiagnostic[] = [];
   activeDebugPanel: 'console' | 'errors' | 'dom' = 'console';
@@ -101,6 +104,7 @@ export class BobeEditor extends Store implements BobeEditorInstance {
                   span children={log.message}
             else
               div class="bobe-editor-empty" children="No console output"
+            div ref={consoleBottom} id="list-bottom"  
           if activeDebugPanel === "errors"
             if diagnostics.length
               for diagnostics; diagnostic
@@ -115,6 +119,12 @@ export class BobeEditor extends Store implements BobeEditorInstance {
             else
               div class="bobe-editor-empty" children="Run preview to inspect DOM"
   `;
+
+  logLenEf = effect(({val}) => {
+    if(val > 0) {
+      this.consoleBottom.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [() => this.logs.length], { type: 'post' });
 
   private initOnce() {
     if (this.initialized) return this.initPromise || Promise.resolve();
@@ -132,9 +142,12 @@ export class BobeEditor extends Store implements BobeEditorInstance {
     this.container = container;
     injectEditorStyles();
     this.readOnly = !!this.readOnly;
-    this.entry = normalizePath(this.entry || DEFAULT_ENTRY);
-    this.selectedPath = normalizePath(this.initialPath || this.entry);
-    this.vfs = new VirtualFileSystem(this.files?.length ? this.files : defaultFiles());
+    const rootDir = normalizeDirectory(this.initialDirectory || this.rootDir);
+    const rawFiles = this.files?.length ? this.files : defaultFiles();
+    const files = resolveEditorFiles(rawFiles, rootDir);
+    this.entry = resolveEditorPath(this.entry || DEFAULT_ENTRY, rootDir);
+    this.selectedPath = resolveEditorPath(this.initialPath || this.entry, rootDir);
+    this.vfs = new VirtualFileSystem(files);
     this.files = this.vfs.files;
     this.diagnosticService = new EditorDiagnosticService(this.vfs);
     this.unsubscribeVfs = this.vfs.subscribe(() => {
@@ -159,10 +172,13 @@ export class BobeEditor extends Store implements BobeEditorInstance {
     this.activeDebugPanel = panel;
   };
 
-  displayPath = (path: string) => path.replace(/^\//, '');
+  displayPath = (path: string) => {
+    const rootDir = normalizeDirectory(this.initialDirectory || this.rootDir);
+    return stripRootDir(path, rootDir).replace(/^\//, '');
+  };
 
   formatDiagnostic = (diagnostic: EditorDiagnostic) => {
-    return `${diagnostic.path}:${diagnostic.start} ${diagnostic.message}`;
+    return `${this.displayPath(diagnostic.path)}:${diagnostic.start} ${diagnostic.message}`;
   };
 
   run = async () => {
@@ -176,7 +192,7 @@ export class BobeEditor extends Store implements BobeEditorInstance {
       if (!iframe) throw new Error('Preview iframe is not mounted.');
       const bundle = bundleForPreview(this.vfs, this.entry);
       iframe.srcdoc = createPreviewHtml(bundle, this.runtimeId);
-      this.pushLog('status', `Running ${this.entry}`);
+      this.pushLog('status', `Running ${this.displayPath(this.entry)}`);
     } catch (error) {
       this.pushLog('error', error instanceof Error ? error.message : String(error));
       this.activeDebugPanel = 'console';
@@ -317,7 +333,7 @@ export class BobeEditor extends Store implements BobeEditorInstance {
   };
 
   private pushLog(level: DebugLogLevel, message: string) {
-    this.logs = [...this.logs, { id: ++this.logId, level, message, time: Date.now() }];
+    this.logs.push({ id: ++this.logId, level, message, time: Date.now() });
   }
 
   private handleInitError(error: unknown) {
@@ -337,6 +353,41 @@ function markerSeverity(monaco: any, severity: EditorDiagnostic['severity']) {
   if (severity === 'error') return monaco.MarkerSeverity.Error;
   if (severity === 'warning') return monaco.MarkerSeverity.Warning;
   return monaco.MarkerSeverity.Info;
+}
+
+function normalizeDirectory(path?: string) {
+  if (!path) return '/';
+  return normalizePath(path);
+}
+
+function resolveEditorFiles(files: EditorFile[], rootDir: string) {
+  return files.map(file => ({
+    ...file,
+    path: resolveEditorPath(file.path, rootDir)
+  }));
+}
+
+function resolveEditorPath(path: string, rootDir: string) {
+  if (!rootDir || rootDir === '/' || isAbsoluteEditorPath(path)) {
+    return normalizePath(path);
+  }
+  return normalizePath(`${rootDir}/${path}`);
+}
+
+function stripRootDir(path: string, rootDir: string) {
+  const normalized = normalizePath(path);
+  if (!rootDir || rootDir === '/') return normalized;
+  const normalizedRoot = normalizeDirectory(rootDir);
+  if (normalized === normalizedRoot) return '/';
+  if (normalized.startsWith(`${normalizedRoot}/`)) {
+    return normalized.slice(normalizedRoot.length);
+  }
+  return normalized;
+}
+
+function isAbsoluteEditorPath(path: string) {
+  const normalized = path.replace(/\\/g, '/');
+  return normalized.startsWith('/') || normalized.startsWith('file://');
 }
 
 function defaultFiles(): EditorFile[] {
@@ -364,7 +415,7 @@ export default class App extends Store {
 `
     },
     {
-      path: '/src/style.css',
+      path: 'src/style.css',
       content: `.demo-card {
   min-height: 100vh;
   box-sizing: border-box;

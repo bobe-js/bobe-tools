@@ -30,6 +30,10 @@ export interface BobeEditorOptions {
   files?: EditorFile[];
   entry?: string;
   initialPath?: string;
+  /** Resolve relative files, entry and initialPath under this virtual directory. */
+  initialDirectory?: string;
+  /** Alias for initialDirectory. */
+  rootDir?: string;
   readOnly?: boolean;
   monaco?: any;
   autoRun?: boolean;

@@ -27,12 +27,11 @@
     "dev": "vite --host 0.0.0.0",
     "demo:build": "vite build"
   },
-  "dependencies": {},
   "devDependencies": {
-    "aoye": "^0.0.74",
-    "bobe": "^0.0.74",
-    "bobe-dom": "^0.0.74",
     "@bobe-js/lang-core": "workspace:*",
+    "aoye": "^0.0.80",
+    "bobe": "^0.0.80",
+    "bobe-dom": "^0.0.80",
     "monaco-editor": "^0.55.1",
     "typescript": "^6.0.2",
     "vite": "^8.0.16"

@@ -22,7 +22,7 @@
     "dev": "rollup -w -c rollup.config.ts --configPlugin esbuild"
   },
   "dependencies": {
-    "bobe": "^0.0.74"
+    "bobe": "^0.0.80"
   },
   "repository": {
     "type": "git",

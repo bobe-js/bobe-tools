@@ -149,9 +149,12 @@ const EDITOR_CSS = `
   border-top: 1px solid var(--be-border);
   background: var(--be-bg-soft);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .bobe-editor-debug-tabs {
+  flex: none;
   height: 36px;
   border-bottom: 1px solid var(--be-border);
 }
@@ -171,7 +174,7 @@ const EDITOR_CSS = `
 }
 
 .bobe-editor-debug-body {
-  height: calc(100% - 36px);
+  flex: 1;
   overflow: auto;
   padding: 8px 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
